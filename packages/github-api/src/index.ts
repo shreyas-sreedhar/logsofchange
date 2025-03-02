@@ -74,8 +74,16 @@ export class GitHubAPI {
    */
  async getUserRepos(): Promise<string[]> {
     try {
-      const response = await this.octokit.repos.listForAuthenticatedUser();
-      return response.data.map(repo => repo.name);
+      const response = await this.octokit.repos.listForAuthenticatedUser({
+        visibility: 'all',  
+        per_page: 100,      // Maximum results per page, maybe make tis as a feature later to list in the dashbaord or maybe hydration thingy variabesl 
+        sort: 'updated'     // latest first 
+      });
+      var thecout = response.data.length;
+      console.log(`Found ${thecout} repositories`);
+
+    return response.data.map(repo => `${repo.full_name} (${repo.private ? 'private' : 'public'})`);
+
     } catch (error) {
       console.error("Error fetching repositories:", error);
       throw error;
