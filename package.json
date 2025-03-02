@@ -1,0 +1,27 @@
+{
+  "name": "changeoflogs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^1.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shreyas-sreedhar/logsofchange.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shreyas-sreedhar/logsofchange/issues"
+  },
+  "homepage": "https://github.com/shreyas-sreedhar/logsofchange#readme",
+  "dependencies": {
+    "typescript": "^5.8.2"
+  }
+}
