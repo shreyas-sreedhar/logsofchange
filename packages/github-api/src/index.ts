@@ -18,6 +18,17 @@ export interface RepoInfo {
   repo: string;
 }
 
+interface RepoResponse {
+    owner: string;
+    repositories: Array<{
+      name: string;
+      status: 'private' | 'public';
+      url: string;
+      description: string | null;
+      lastUpdated: string;
+    }>;
+    totalCount: number;
+  }
 
 // Cache for API responses
 const cache = new NodeCache({ stdTTL: 600, checkperiod: 60 });
@@ -67,12 +78,12 @@ export class GitHubAPI {
     }
     return false;
   }
-
+ /** */
  /**
    * Get the list of repositories for the authenticated user
    * @returns Array of repositories
    */
- async getUserRepos(): Promise<string[]> {
+ async getUserRepos(): Promise<RepoResponse> {
     try {
       const response = await this.octokit.repos.listForAuthenticatedUser({
         visibility: 'all',  
@@ -82,7 +93,22 @@ export class GitHubAPI {
       var thecout = response.data.length;
       console.log(`Found ${thecout} repositories`);
 
-    return response.data.map(repo => `${repo.full_name} (${repo.private ? 'private' : 'public'})`);
+    const owner = response.data[0]?.owner.login || 'unknown';
+    
+    return {
+      owner: owner,
+      repositories: response.data.map(repo => ({
+        name: repo.name,
+        status: repo.private ? 'private' : 'public',
+        url: repo.html_url,
+        description: repo.description,
+        lastUpdated: repo.updated_at || 'No update date'
+      })),
+      totalCount: response.data.length
+    };
+
+
+    // return response.data.map(repo => `${repo.full_name} (${repo.private ? 'private' : 'public'})`);
 
     } catch (error) {
       console.error("Error fetching repositories:", error);

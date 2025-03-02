@@ -28,12 +28,7 @@ async function main() {
   try {
     console.log(`Fetching repositories for GitHub user: ${owner}...`);
     const repos = await api.getUserRepos();
-
-    console.log(`\nRepositories owned by ${owner}:`);
-    repos.forEach(repoName => {
-      console.log(`- ${repoName}`);
-    });
-
+    console.log(JSON.stringify(repos, null, 2)); // Pretty print JSON
   } catch (error) {
     console.error('Error:', error);
   }
