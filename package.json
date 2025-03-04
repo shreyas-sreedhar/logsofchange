@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "turbo run dev",
+    "dev:next": "cd apps/src && npm run dev",
     "build": "turbo run build"
   },
   "devDependencies": {
