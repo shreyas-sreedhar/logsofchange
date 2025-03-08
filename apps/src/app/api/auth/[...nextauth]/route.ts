@@ -17,16 +17,24 @@ export const authOptions = {
     signIn: '/',
   },
   callbacks: {
-    async jwt({ token, account }: { token: any, account: any }) {
+    async jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
+        
+        if (profile) {
+          token.githubId = profile.id;
+        }
       }
       return token;
     },
-    async session({ session, token }: { session: any, token: any }) {
+    async session({ session, token }) {
       return {
         ...session,
-        accessToken: token.accessToken
+        accessToken: token.accessToken,
+        user: {
+          ...session.user,
+          id: token.githubId
+        }
       };
     }
   }
