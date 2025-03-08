@@ -1,33 +1,22 @@
 'use client';
 
 import { useSession, signOut } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import StatsCard from "../components/dashboard/StatsCard";
 import RepoCard from "../components/dashboard/RepoCard";
 import { ChartIcon, ClockIcon, LinkIcon } from "../components/Icons";
 import useGithubRepos from "../hooks/useGithubRepos";
+import useChangelogs from "../hooks/useChangelogs";
+import ChangelogCard from "../components/dashboard/ChangelogCard";
 import { useRouter } from "next/navigation";
 
 export default function Dashboard() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const { repos, recentRepos, loading, error, refreshRepos } = useGithubRepos();
+  const { changelogs, loading: changelogsLoading, error: changelogsError } = useChangelogs(1, 5);
   const [showAllRepos, setShowAllRepos] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [pageLoaded, setPageLoaded] = useState(false);
-  const [showSkeleton, setShowSkeleton] = useState(true);
-
-  // Set page as loaded after initial render
-  useEffect(() => {
-    setPageLoaded(true);
-    
-    // Show skeleton for at least 500ms to avoid flashing
-    const timer = setTimeout(() => {
-      setShowSkeleton(false);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleGenerateChangelog = (repoId: number) => {
     router.push(`/repository/${repoId}`);
@@ -39,8 +28,8 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  // Show loading state if session is loading and page hasn't loaded yet
-  if ((sessionStatus === "loading" || !pageLoaded) && !session) {
+  // Show loading state if session is loading
+  if (sessionStatus === "loading") {
     return (
       <div className="min-h-screen p-8 bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -66,21 +55,6 @@ export default function Dashboard() {
     );
   }
 
-  // Render skeleton UI while loading initial data
-  const renderSkeletonRepos = () => (
-    <div className="space-y-4">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg animate-pulse">
-          <div>
-            <div className="h-5 w-40 bg-gray-200 rounded mb-2"></div>
-            <div className="h-4 w-24 bg-gray-200 rounded"></div>
-          </div>
-          <div className="h-8 w-24 bg-gray-200 rounded"></div>
-        </div>
-      ))}
-    </div>
-  );
-
   return (
     <div className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-6xl mx-auto">
@@ -96,8 +70,11 @@ export default function Dashboard() {
             >
               Sign Out
             </button>
-            <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
-              New Changelog
+            <button 
+              onClick={() => router.push('/changelogs')}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              View All Changelogs
             </button>
           </div>
         </div>
@@ -106,13 +83,13 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatsCard 
             title="Total Repositories" 
-            value={showSkeleton ? 0 : repos.length} 
+            value={loading ? 0 : repos.length} 
             description="Connected to your GitHub account"
             icon={<ChartIcon />}
           />
           <StatsCard 
             title="Generated Changelogs" 
-            value={8} 
+            value={changelogsLoading ? 0 : changelogs.length} 
             description="Across all repositories"
             icon={<ClockIcon />}
           />
@@ -124,6 +101,45 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* Recent Changelogs */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200 mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">Recent Changelogs</h2>
+              <p className="text-gray-600 text-sm">Your most recently generated changelogs.</p>
+            </div>
+            <div>
+              <button 
+                onClick={() => router.push('/changelogs')}
+                className="text-blue-600 text-sm font-medium"
+              >
+                View All
+              </button>
+            </div>
+          </div>
+
+          {changelogsLoading ? (
+            <div className="py-8 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading your changelogs...</p>
+            </div>
+          ) : changelogsError ? (
+            <div className="py-8 text-center">
+              <div className="text-red-500 mb-2">Error: {changelogsError}</div>
+            </div>
+          ) : changelogs.length === 0 ? (
+            <div className="py-8 text-center text-gray-500">
+              You haven't generated any changelogs yet. Select a repository below to get started.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {changelogs.map(changelog => (
+                <ChangelogCard key={changelog.id} changelog={changelog} />
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Recent Repositories */}
         <div className="bg-white p-6 rounded-lg border border-gray-200 mb-8">
           <div className="flex justify-between items-center mb-4">
@@ -132,7 +148,7 @@ export default function Dashboard() {
               <p className="text-gray-600 text-sm">Select a repository to generate a changelog.</p>
             </div>
             <div className="flex items-center gap-3">
-              {!showSkeleton && !loading && repos.length > 0 && (
+              {!loading && repos.length > 0 && (
                 <button 
                   onClick={handleRefresh}
                   disabled={loading || refreshing}
@@ -154,7 +170,7 @@ export default function Dashboard() {
                   )}
                 </button>
               )}
-              {!showSkeleton && !loading && repos.length > recentRepos.length && (
+              {!loading && repos.length > recentRepos.length && (
                 <button 
                   onClick={() => setShowAllRepos(!showAllRepos)}
                   className="text-blue-600 text-sm font-medium"
@@ -165,8 +181,11 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {showSkeleton || loading ? (
-            renderSkeletonRepos()
+          {loading ? (
+            <div className="py-12 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading your repositories...</p>
+            </div>
           ) : error ? (
             <div className="py-8 text-center">
               <div className="text-red-500 mb-2">Error: {error}</div>

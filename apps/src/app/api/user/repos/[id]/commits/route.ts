@@ -4,16 +4,21 @@ import { authOptions } from '../../../../auth/[...nextauth]/route';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
+    const { params } = context; // Ensure params is properly extracted
+    if (!params?.id) {
+      return NextResponse.json({ error: 'Repository ID is missing' }, { status: 400 });
+    }
+  
     const session = await getServerSession(authOptions);
     
     if (!session || !session.accessToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const repoId = params.id;
+    const { id } = params;
     const { searchParams } = new URL(request.url);
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
@@ -31,7 +36,7 @@ export async function GET(
     }
 
     const repos = await repoResponse.json();
-    const repo = repos.find((r: any) => r.id.toString() === repoId);
+    const repo = repos.find((r: any) => r.id.toString() === id);
     
     if (!repo) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });

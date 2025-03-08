@@ -13,7 +13,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const repoId = params.id;
+    // Properly destructure the ID from params
+    const { id } = params;
     
     // Fetch repositories to find the one with matching ID
     const response = await fetch('https://api.github.com/user/repos?per_page=100', {
@@ -31,7 +32,7 @@ export async function GET(
     const repos = await response.json();
     
     // Find the repository by ID
-    const repo = repos.find((r: any) => r.id.toString() === repoId);
+    const repo = repos.find((r: any) => r.id.toString() === id);
     
     if (!repo) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
