@@ -1,11 +1,12 @@
 'use client';
-
+// this is the main changelog page with id that comes in, so make sure to check if the id is valid and if the user is authenticated
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { Changelog } from '../../hooks/useChangelogs';
+
 
 export default function ChangelogPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -14,7 +15,6 @@ export default function ChangelogPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (sessionStatus === 'unauthenticated') {
       router.push('/');

@@ -71,3 +71,6 @@ results
 # Cache directories
 .cache
 **/.cache
+
+/backend/*
+/backend-old/*

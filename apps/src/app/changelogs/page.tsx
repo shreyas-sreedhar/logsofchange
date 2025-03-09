@@ -1,4 +1,5 @@
 'use client';
+//this page is the changelogs page that displays all the changelogs for the user and with all the repos together, 
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';

@@ -492,6 +492,14 @@ export class RepositoryAnalyzer {
             console.log(`Removed cloned repository at ${this.repoPath}`);
         }
     }
+    
+    /**
+     * Checkout a specific commit hash
+     */
+    public async checkoutCommit(commitHash: string): Promise<void> {
+        await this.git.checkout([commitHash]);
+        console.log(`Checked out commit: ${commitHash}`);
+    }
 }
 
 // Example usage

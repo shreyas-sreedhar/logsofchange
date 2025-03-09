@@ -1,55 +1,49 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { NextRequest, NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
-// Initialize Supabase client
+// Database configuration
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Validate environment variables
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
-}
-
-// Create Supabase client only if we have valid credentials
-const supabase = supabaseUrl && supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey) 
-  : null;
-
-// Helper function to extract GitHub ID from avatar URL
-function extractGitHubIdFromAvatarUrl(avatarUrl: string): string | null {
-  try {
-    // GitHub avatar URLs are in the format: https://avatars.githubusercontent.com/u/70530523?v=4
-    const match = avatarUrl.match(/\/u\/(\d+)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return null;
-  } catch (error) {
-    console.error('Error extracting GitHub ID from avatar URL:', error);
+// Initialize Supabase client
+const supabase = (() => {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('Missing Supabase environment variables');
     return null;
   }
-}
+  return createClient(supabaseUrl, supabaseServiceKey);
+})();
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-export async function POST(request: Request) {
+/**
+ * Helper function to extract GitHub ID from avatar URL
+ */
+function extractGitHubIdFromAvatarUrl(avatarUrl: string): string | null {
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const match = avatarUrl.match(/\/u\/(\d+)/);
+    return match && match[1] ? match[1] : null;
+  } catch (error) {
+    console.error('Error extracting GitHub ID:', error);
+    return null;
+  }
+}
 
+/**
+ * API route for processing changelogs
+ * Authentication is handled by middleware
+ */
+export async function POST(request: NextRequest) {
+  try {
     // Check if Supabase is properly initialized
     if (!supabase) {
       return NextResponse.json({ 
-        error: 'Database connection not available. Please check server configuration.' 
+        error: 'Database connection not available' 
       }, { status: 500 });
     }
 
@@ -60,22 +54,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing changelog ID' }, { status: 400 });
     }
 
-    // Extract GitHub ID from avatar URL
-    let userId = null;
-    
-    if (session.user.image) {
-      userId = extractGitHubIdFromAvatarUrl(session.user.image);
+    // Get user information from token
+    const token = await getToken({ req: request });
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
     
-    // Fallback to name if we couldn't extract ID
-    if (!userId && session.user.name) {
-      // Use name as a fallback (not ideal but better than nothing)
-      userId = session.user.name.replace(/\s+/g, '_').toLowerCase();
-    }
+    // Determine user ID from token
+    let userId = token.sub;
     
-    // Final fallback
-    if (!userId) {
-      userId = 'unknown_user';
+    // Try to get a more specific ID if available
+    if (token.picture) {
+      const extractedId = extractGitHubIdFromAvatarUrl(token.picture as string);
+      if (extractedId) userId = extractedId;
     }
 
     // Fetch the changelog data from Supabase
@@ -144,9 +135,7 @@ async function generateChangelog(
   toDate: string
 ): Promise<string> {
   try {
-    // Format the commit data for the prompt
     const commitSummaries = commits.map(commit => {
-      // Get file changes summary
       const fileChanges = commit.changedFiles
         .map((file: any) => `${file.filename} (${file.status}, +${file.additions}, -${file.deletions})`)
         .join('\n  - ');
@@ -156,22 +145,28 @@ async function generateChangelog(
   - ${fileChanges}`;
     }).join('\n\n');
 
-    // Create the prompt for OpenAI
     const prompt = `
-Generate a well-formatted changelog for the repository "${repoName}" covering changes from ${fromDate} to ${toDate}.
+Generate a well-formatted changelog in Markdown for the repository "${repoName}" based on commit data from ${fromDate} to ${toDate}.
 
-Here's the raw commit data:
+Below is the raw commit data to process:
 
 ${commitSummaries}
 
-Please organize this into a professional changelog with the following sections:
-1. Summary of changes
-2. New features
-3. Bug fixes
-4. Other improvements
-5. Breaking changes (if any)
+Using this data, create a professional changelog with the following sections:
+- **Date**: The date of the changelog.
 
-Format the changelog in markdown.
+- **Summary of Changes**: A concise overview of the updates in this period, very concise and technical.
+- **New Features**: List of added features, with brief descriptions.
+- **Bug Fixes**: List of resolved issues, with short explanations.
+- **Other Improvements**: Enhancements or optimizations not covered above.
+- **Breaking Changes**: Any changes that might affect existing users or integrations (include "None" if there are none).
+
+Guidelines:
+- Format the output in clean, readable Markdown with appropriate headings (e.g., ## for sections).
+- Use bullet points (- or *) for lists within each section.
+- Categorize commits intelligently based on their content (e.g., "feat:" for features, "fix:" for bugs).
+- If the commit data lacks context, make reasonable assumptions or note where clarification is needed.
+- Ensure the tone is professional and suitable for a public-facing changelog.
 `;
 
     // Call OpenAI API to generate the changelog
