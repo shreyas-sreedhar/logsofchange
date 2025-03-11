@@ -1,19 +1,79 @@
 'use client';
 // this is the main changelog page with id that comes in, so make sure to check if the id is valid and if the user is authenticated
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { Changelog } from '../../hooks/useChangelogs';
+import { use } from 'react';
 
+// Add this before the main component
+interface RepositoryContextProps {
+  repoName: string;
+  technologies?: string[];
+  pullRequests?: Array<{
+    number: number;
+    title: string;
+    mergedAt?: string;
+  }>;
+}
 
-export default function ChangelogPage({ params }: { params: { id: string } }) {
+function RepositoryContext({ repoName, technologies, pullRequests }: RepositoryContextProps) {
+  if (!technologies?.length && !pullRequests?.length) {
+    return null;
+  }
+  
+  return (
+    <div className="mb-6 bg-gray-50 p-6 rounded border border-gray-200">
+      <h2 className="text-xl font-semibold mb-3">Repository Context</h2>
+      
+      {technologies && technologies.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-lg font-medium mb-2">Technologies</h3>
+          <div className="flex flex-wrap gap-2">
+            {technologies.map((tech, index) => (
+              <span key={index} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                {tech}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {pullRequests && pullRequests.length > 0 && (
+        <div>
+          <h3 className="text-lg font-medium mb-2">Recent Pull Requests</h3>
+          <ul className="list-disc list-inside space-y-1 pl-2">
+            {pullRequests.slice(0, 5).map((pr) => (
+              <li key={pr.number} className="text-gray-700">
+                #{pr.number}: {pr.title}
+                {pr.mergedAt && (
+                  <span className="text-gray-500 text-xs ml-1">
+                    (merged on {new Date(pr.mergedAt).toLocaleDateString()})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ChangelogPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [changelog, setChangelog] = useState<Changelog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Unwrap the params Promise
+  const resolvedParams = use(params);
+  const changelogId = resolvedParams.id;
+
+  // Get the changelog ID from params
 
   useEffect(() => {
     if (sessionStatus === 'unauthenticated') {
@@ -24,17 +84,23 @@ export default function ChangelogPage({ params }: { params: { id: string } }) {
   // Fetch changelog data
   useEffect(() => {
     const fetchChangelogData = async () => {
-      if (sessionStatus !== 'authenticated' || !params.id) return;
+      if (sessionStatus !== 'authenticated' || !changelogId) return;
       
       try {
         setLoading(true);
-        const response = await fetch(`/api/changelog/${params.id}`);
+        console.log('Fetching changelog with ID:', changelogId);
+        
+        const response = await fetch(`/api/changelog/${changelogId}`, {
+          credentials: 'include', // Include cookies for authentication
+        });
         
         if (!response.ok) {
-          throw new Error(`Failed to fetch changelog: ${response.statusText}`);
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed to fetch changelog: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('Changelog data received:', data);
         setChangelog(data);
         setError(null);
       } catch (err) {
@@ -46,7 +112,7 @@ export default function ChangelogPage({ params }: { params: { id: string } }) {
     };
 
     fetchChangelogData();
-  }, [params.id, sessionStatus]);
+  }, [changelogId, sessionStatus]);
 
   // Refresh the changelog if it's still processing
   useEffect(() => {
@@ -55,7 +121,7 @@ export default function ChangelogPage({ params }: { params: { id: string } }) {
     if (changelog && changelog.status === 'processing') {
       intervalId = setInterval(async () => {
         try {
-          const response = await fetch(`/api/changelog/${params.id}`);
+          const response = await fetch(`/api/changelog/${resolvedParams.id}`);
           
           if (!response.ok) return;
           
@@ -76,7 +142,7 @@ export default function ChangelogPage({ params }: { params: { id: string } }) {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [changelog, params.id]);
+  }, [changelog, resolvedParams.id]);
 
   // Loading state
   if (loading) {
@@ -191,9 +257,20 @@ export default function ChangelogPage({ params }: { params: { id: string } }) {
                 </button>
               </div>
             ) : (
-              <div className="bg-gray-50 p-6 rounded border border-gray-200 prose max-w-none">
-                <ReactMarkdown>{changelog.processed_changelog || 'No content available'}</ReactMarkdown>
-              </div>
+              <>
+                {/* Add Repository Context here if it exists */}
+                {changelog.repository_context && (
+                  <RepositoryContext 
+                    repoName={changelog.repo_name}
+                    technologies={changelog.repository_context.technologies}
+                    pullRequests={changelog.repository_context.pullRequests}
+                  />
+                )}
+                
+                <div className="bg-gray-50 p-6 rounded border border-gray-200 prose max-w-none">
+                  <ReactMarkdown>{changelog.processed_changelog || 'No content available'}</ReactMarkdown>
+                </div>
+              </>
             )}
           </div>
           

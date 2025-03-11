@@ -8,7 +8,12 @@ interface RepoCardProps {
   onGenerateClick: () => void;
 }
 
-export default function RepoCard({ name, stars, updatedAt, onGenerateClick }: RepoCardProps) {
+export default function RepoCard({ 
+  name, 
+  stars, 
+  updatedAt, 
+  onGenerateClick
+}: RepoCardProps) {
   // Format the time difference
   const getTimeAgo = (dateString: string) => {
     const updated = new Date(dateString);
@@ -22,12 +27,12 @@ export default function RepoCard({ name, stars, updatedAt, onGenerateClick }: Re
   };
 
   return (
-    <div className="flex justify-between items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+    <div className="flex justify-between items-center p-5 border border-gray-200 rounded-none hover:bg-gray-50 transition-colors">
       <div>
-        <h3 className="text-base font-medium mb-1">{name}</h3>
-        <div className="flex items-center text-sm text-gray-500">
+        <h3 className="text-base font-medium mb-1 text-black">{name}</h3>
+        <div className="flex items-center text-sm text-gray-600">
           <span className="flex items-center">
-            <StarIcon className="w-4 h-4 mr-1 text-yellow-400" /> {stars}
+            <StarIcon className="w-4 h-4 mr-1 text-yellow-500" /> {stars}
           </span>
           <span className="mx-2">•</span>
           <span>{getTimeAgo(updatedAt)}</span>
@@ -35,9 +40,9 @@ export default function RepoCard({ name, stars, updatedAt, onGenerateClick }: Re
       </div>
       <button 
         onClick={onGenerateClick}
-        className="text-blue-500 font-medium flex items-center"
+        className="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-none font-normal"
       >
-        Generate <span className="ml-1">→</span>
+        Generate
       </button>
     </div>
   );

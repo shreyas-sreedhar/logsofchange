@@ -1,21 +1,6 @@
+import { auth } from '../../../auth';
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// Validate environment variables
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
-}
-
-// Create Supabase client only if we have valid credentials
-const supabase = supabaseUrl && supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey) 
-  : null;
+import { supabase } from '../../../lib/db';
 
 // Helper function to extract GitHub ID from avatar URL
 function extractGitHubIdFromAvatarUrl(avatarUrl: string): string | null {
@@ -27,19 +12,89 @@ function extractGitHubIdFromAvatarUrl(avatarUrl: string): string | null {
     }
     return null;
   } catch (error) {
-    console.error('Error extracting GitHub ID from avatar URL:', error);
+    console.error('❌ [CHANGELOG API] Error extracting GitHub ID from avatar URL:', error);
     return null;
   }
 }
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
+) {
+  console.log('📝 [CHANGELOG API] GET request received');
+  try {
+    console.log('📝 [CHANGELOG API] Authenticating user session');
+    const session = await auth();
+    
+    if (!session?.user?.id) {
+      console.error('❌ [CHANGELOG API] Authentication failed: No user ID in session');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.log(`✅ [CHANGELOG API] User authenticated: ${session.user.id}`);
+
+    // Check if Supabase is properly initialized
+    if (!supabase) {
+      console.error('❌ [CHANGELOG API] Supabase client not initialized');
+      return NextResponse.json({ 
+        error: 'Database connection not available. Please check server configuration.' 
+      }, { status: 500 });
+    }
+
+    // Get the changelog ID from params
+    console.log('📝 [CHANGELOG API] Extracting changelog ID from params');
+    const { id: changelogId } = await params;
+    
+    if (!changelogId) {
+      console.error('❌ [CHANGELOG API] Changelog ID is missing');
+      return NextResponse.json({ error: 'Changelog ID is required' }, { status: 400 });
+    }
+
+    console.log(`📝 [CHANGELOG API] Fetching changelog with ID: ${changelogId}`);
+    console.log(`📝 [CHANGELOG API] User ID: ${session.user.id}`);
+
+    // Fetch the changelog from Supabase
+    console.log(`📝 [CHANGELOG API] Querying database for changelog: ${changelogId}`);
+    const { data: changelog, error } = await supabase
+      .from('changelogs')
+      .select('*')
+      .eq('id', changelogId)
+      .single();
+
+    if (error) {
+      console.error('❌ [CHANGELOG API] Error fetching changelog:', error);
+      return NextResponse.json({ error: 'Failed to fetch changelog' }, { status: 500 });
+    }
+
+    if (!changelog) {
+      console.error(`❌ [CHANGELOG API] Changelog not found: ${changelogId}`);
+      return NextResponse.json({ error: 'Changelog not found' }, { status: 404 });
+    }
+    console.log(`✅ [CHANGELOG API] Changelog fetched successfully`);
+    console.log(`📝 [CHANGELOG API] Changelog status: ${changelog.status}`);
+
+    // Check if the user has access to this changelog
+    if (changelog.user_id !== session.user.id) {
+      console.error(`❌ [CHANGELOG API] Access denied: User ${session.user.id} attempting to access changelog owned by ${changelog.user_id}`);
+      return NextResponse.json({ error: 'You do not have access to this changelog' }, { status: 403 });
+    }
+    console.log(`✅ [CHANGELOG API] Access verified for user: ${session.user.id}`);
+
+    console.log(`✅ [CHANGELOG API] Returning changelog data`);
+    return NextResponse.json(changelog);
+  } catch (error) {
+    console.error('❌ [CHANGELOG API] Unhandled error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
-    if (!session || !session.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -50,35 +105,22 @@ export async function GET(
       }, { status: 500 });
     }
 
-    const changelogId = params.id;
+    // Get the changelog ID from params
+    const { id: changelogId } = await params;
     
-    // Extract GitHub ID from avatar URL
-    let userId = null;
-    
-    if (session.user.image) {
-      userId = extractGitHubIdFromAvatarUrl(session.user.image);
+    if (!changelogId) {
+      return NextResponse.json({ error: 'Changelog ID is required' }, { status: 400 });
     }
-    
-    // Fallback to name if we couldn't extract ID
-    if (!userId && session.user.name) {
-      // Use name as a fallback (not ideal but better than nothing)
-      userId = session.user.name.replace(/\s+/g, '_').toLowerCase();
-    }
-    
-    // Final fallback
-    if (!userId) {
-      userId = 'unknown_user';
-    }
-    
-    // Fetch the changelog from Supabase
-    const { data: changelog, error } = await supabase
+
+    // First, check if the changelog exists and belongs to the user
+    const { data: changelog, error: fetchError } = await supabase
       .from('changelogs')
-      .select('*')
+      .select('user_id')
       .eq('id', changelogId)
       .single();
 
-    if (error) {
-      console.error('Error fetching changelog:', error);
+    if (fetchError) {
+      console.error('Error fetching changelog:', fetchError);
       return NextResponse.json({ error: 'Failed to fetch changelog' }, { status: 500 });
     }
 
@@ -86,15 +128,25 @@ export async function GET(
       return NextResponse.json({ error: 'Changelog not found' }, { status: 404 });
     }
 
-    // Verify that the user has access to this changelog
-    if (changelog.user_id !== userId) {
-      return NextResponse.json({ error: 'Unauthorized access to changelog' }, { status: 403 });
+    // Check if the user has access to this changelog
+    if (changelog.user_id !== session.user.id) {
+      return NextResponse.json({ error: 'You do not have access to this changelog' }, { status: 403 });
     }
 
-    // Return the changelog
-    return NextResponse.json(changelog);
+    // Delete the changelog
+    const { error: deleteError } = await supabase
+      .from('changelogs')
+      .delete()
+      .eq('id', changelogId);
+
+    if (deleteError) {
+      console.error('Error deleting changelog:', deleteError);
+      return NextResponse.json({ error: 'Failed to delete changelog' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error fetching changelog:', error);
+    console.error('Error deleting changelog:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

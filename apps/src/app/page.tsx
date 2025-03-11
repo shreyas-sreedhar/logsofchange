@@ -1,18 +1,37 @@
 'use client';
 
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 import LatestChanges from "./components/homepage/LatestChages";
 import GridBackground from "./components/homepage/GridBackground";
+import { HomePageShimmer } from "./components/homepage/ShimmerLoading";
 
 export default function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.push('/dashboard');
+    }
+  }, [status, router]);
+
+  const handleSignIn = () => {
+    signIn('github', { callbackUrl: '/dashboard' });
+  };
+
+  // Show loading state while checking session
+  if (status === 'loading') {
+    return <HomePageShimmer />;
+  }
+
   return (
     <div className="min-h-screen bg-white dark:bg-black relative overflow-hidden">
       {/* Grid background with mask */}
       <GridBackground columns={8} rows={8} maskDirection="left" />
-
-  
- 
 
       {/* Main content */}
       <div className="relative z-20 container mx-auto px-4 py-20 md:py-32 flex flex-col md:flex-row items-center">
@@ -28,39 +47,25 @@ export default function Home() {
             Create, manage, and share product updates with ease.
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
-            {/* Get Started Button */}
             <button
-              className="bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 rounded-none px-6 py-6 h-auto"
-              onClick={() => signIn('github', { callbackUrl: '/dashboard' })}
+              onClick={handleSignIn}
+              className="px-6 py-3 bg-black dark:bg-white text-white dark:text-black font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
             >
-              Get Started with Github
+              Sign in with GitHub
             </button>
-            {/* Contact Sales Button */}
-            {/* <button className="border-black dark:border-white rounded-none px-6 py-6 h-auto">
-              Contact Sales
-            </button> */}
+            <a
+              href="#features"
+              className="px-6 py-3 border border-gray-300 dark:border-gray-700 text-black dark:text-white font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+            >
+              Learn More
+            </a>
           </div>
         </div>
-
+        
         <div className="md:w-1/2">
-          <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-6 shadow-lg">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-normal">Latest Changes</h2>
-              <a
-                href="/changelog"
-                className="text-sm text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300"
-              >
-                View all
-              </a>
-            </div>
-            <LatestChanges />
-          </div>
+          <LatestChanges />
         </div>
       </div>
-
-   
-     
-
 
       {/* Footer */}
       <footer className="p-4 text-center text-sm text-gray-600">

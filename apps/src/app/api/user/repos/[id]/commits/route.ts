@@ -1,24 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../../auth/[...nextauth]/route';
+import { auth } from '../../../../../auth';
 
 export async function GET(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { params } = context; // Ensure params is properly extracted
-    if (!params?.id) {
+    // Get the params first
+    const resolvedParams = await params;
+    
+    // Validate repository ID
+    if (!resolvedParams?.id) {
       return NextResponse.json({ error: 'Repository ID is missing' }, { status: 400 });
     }
   
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     if (!session || !session.accessToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const repoId = resolvedParams.id;
     const { searchParams } = new URL(request.url);
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
@@ -36,7 +38,7 @@ export async function GET(
     }
 
     const repos = await repoResponse.json();
-    const repo = repos.find((r: any) => r.id.toString() === id);
+    const repo = repos.find((r: any) => r.id.toString() === repoId);
     
     if (!repo) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });

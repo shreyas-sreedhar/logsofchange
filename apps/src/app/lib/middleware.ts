@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../api/auth/[...nextauth]/route';
 import { createClient } from '@supabase/supabase-js';
-import { createApiResponse } from './api-utils';
+import { auth } from '../auth';
 
 // Define a custom session type that matches our expected structure
 export interface CustomSession {
@@ -11,27 +9,43 @@ export interface CustomSession {
     name?: string;
     email?: string;
     image?: string;
+    login?: string;
   };
   accessToken?: string;
   expires?: string;
 }
 
 /**
- * Middleware to handle authentication and execute the handler if authenticated
+ * Middleware to check if the user is authenticated
  */
-export async function withAuth(
-  request: NextRequest, 
-  handler: (req: NextRequest) => Promise<NextResponse>
-): Promise<NextResponse> {
-  // Get session using Next.js built-in method
-  const session = await getServerSession(authOptions as any);
-  
-  // Check if session exists and has a user
-  if (!session || !Object.prototype.hasOwnProperty.call(session, 'user')) {
-    return createApiResponse(undefined, 'Unauthorized', 401);
-  }
-  
-  return handler(request);
+export async function withAuth(handler: Function) {
+  return async (req: Request, context: any) => {
+    try {
+      const session = await auth();
+      
+      if (!session || !session.user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      
+      return handler(req, context, session);
+    } catch (error) {
+      console.error('Auth middleware error:', error);
+      return NextResponse.json({ error: 'Authentication error' }, { status: 500 });
+    }
+  };
+}
+
+/**
+ * Middleware to check if the user has a valid GitHub token
+ */
+export async function withGitHubToken(handler: Function) {
+  return withAuth(async (req: Request, context: any, session: any) => {
+    if (!session.accessToken) {
+      return NextResponse.json({ error: 'GitHub token not found' }, { status: 401 });
+    }
+    
+    return handler(req, context, session);
+  });
 }
 
 /**

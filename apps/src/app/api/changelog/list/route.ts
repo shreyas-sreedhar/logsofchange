@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { auth } from '../../../auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -17,26 +16,11 @@ const supabase = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey) 
   : null;
 
-// Helper function to extract GitHub ID from avatar URL
-function extractGitHubIdFromAvatarUrl(avatarUrl: string): string | null {
-  try {
-    // GitHub avatar URLs are in the format: https://avatars.githubusercontent.com/u/70530523?v=4
-    const match = avatarUrl.match(/\/u\/(\d+)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return null;
-  } catch (error) {
-    console.error('Error extracting GitHub ID from avatar URL:', error);
-    return null;
-  }
-}
-
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
-    if (!session || !session.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -52,31 +36,32 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const page = parseInt(searchParams.get('page') || '1');
     const offset = (page - 1) * limit;
+    const repoId = searchParams.get('repoId');
     
-    // Extract GitHub ID from avatar URL
-    let userId = null;
+    // Get user ID directly from the session
+    const userId = session.user.id;
     
-    if (session.user.image) {
-      userId = extractGitHubIdFromAvatarUrl(session.user.image);
+    console.log('Fetching changelogs for user:', userId);
+    if (repoId) {
+      console.log('Filtering by repository ID:', repoId);
     }
-    
-    // Fallback to name if we couldn't extract ID
-    if (!userId && session.user.name) {
-      // Use name as a fallback (not ideal but better than nothing)
-      userId = session.user.name.replace(/\s+/g, '_').toLowerCase();
-    }
-    
-    // Final fallback
-    if (!userId) {
-      userId = 'unknown_user';
-    }
+    console.log('Request path:', request.url);
+    console.log('Page:', page, 'Limit:', limit);
 
     try {
-      // Fetch changelogs from Supabase
-      const { data: changelogs, error, count } = await supabase
+      // Start building the query
+      let query = supabase
         .from('changelogs')
         .select('*', { count: 'exact' })
-        .eq('user_id', userId)
+        .eq('user_id', userId);
+      
+      // Add repository filter if repoId is provided
+      if (repoId) {
+        query = query.eq('repo_id', repoId);
+      }
+      
+      // Complete the query with ordering and pagination
+      const { data: changelogs, error, count } = await query
         .order('generated_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -101,31 +86,27 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to fetch changelogs' }, { status: 500 });
       }
 
-      // Return response with changelogs and pagination info
+      // Calculate total pages
+      const totalPages = count ? Math.ceil(count / limit) : 0;
+      
+      console.log('Found', changelogs?.length || 0, 'changelogs out of', count, 'total');
+
+      // Return changelogs with pagination info
       return NextResponse.json({
         changelogs: changelogs || [],
         pagination: {
           total: count || 0,
           page,
           limit,
-          totalPages: Math.ceil((count || 0) / limit)
+          totalPages
         }
       });
     } catch (dbError) {
       console.error('Database error:', dbError);
-      // Return empty results for any database-related errors
-      return NextResponse.json({
-        changelogs: [],
-        pagination: {
-          total: 0,
-          page,
-          limit,
-          totalPages: 0
-        }
-      });
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
   } catch (error) {
-    console.error('Error listing changelogs:', error);
+    console.error('Error in changelog list API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

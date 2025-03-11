@@ -1,5 +1,6 @@
 // apps/src/app/lib/repository-analyzer.ts
 import { Octokit } from '@octokit/rest';
+import { getRepositoryPullRequests, getRepositoryCommits } from './github';
 
 export interface RepoContext {
   repositoryName: string;
@@ -9,6 +10,28 @@ export interface RepoContext {
   fileStructure: string;
   technologies: string[];
   readme?: string;
+}
+
+// Interface for the changelog context
+export interface ChangelogContext {
+  repositoryName: string;
+  repositoryDescription?: string;
+  defaultBranch: string;
+  mainBranchCommits: Array<{
+    sha: string;
+    message: string;
+    date: string;
+    author: string;
+  }>;
+  pullRequests: Array<{
+    number: number;
+    title: string;
+    state: string;
+    createdAt: string;
+    mergedAt?: string;
+    mergeCommitSha?: string;
+  }>;
+  technologies: string[];
 }
 
 // GitHub API response types
@@ -412,4 +435,139 @@ function determineMainPurpose(
   }
   
   return "A software project whose main purpose couldn't be automatically determined.";
+}
+
+/**
+ * Generate repository context specifically for changelog generation
+ * Analyzes main branch commits and PR titles
+ * 
+ * @param accessToken GitHub access token
+ * @param owner Repository owner
+ * @param repo Repository name
+ * @param fromDate Start date for changelog
+ * @param toDate End date for changelog
+ * @returns Changelog context object
+ */
+export async function getChangelogContext(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  fromDate?: string,
+  toDate?: string
+): Promise<ChangelogContext> {
+  try {
+    // Initialize Octokit
+    const octokit = new Octokit({
+      auth: accessToken,
+    });
+    
+    // Get repository information
+    const { data: repoData } = await octokit.repos.get({
+      owner,
+      repo,
+    });
+    
+    const defaultBranch = repoData.default_branch || 'main';
+    
+    // Get main branch commits in date range
+    const mainBranchCommits = await getRepositoryCommits(accessToken, owner, repo, {
+      since: fromDate,
+      until: toDate,
+      sha: defaultBranch,
+      perPage: 50
+    });
+    
+    // Get pull requests to main branch in date range
+    const pullRequests = await getRepositoryPullRequests(accessToken, owner, repo, {
+      base: defaultBranch,
+      state: 'closed',
+      since: fromDate,
+      perPage: 30
+    });
+    
+    // Filter PRs to those merged in the date range if toDate is specified
+    const filteredPRs = pullRequests.filter(pr => {
+      if (!pr.merged_at) return false;
+      
+      const mergedAt = new Date(pr.merged_at);
+      const afterFromDate = !fromDate || mergedAt >= new Date(fromDate);
+      const beforeToDate = !toDate || mergedAt <= new Date(toDate);
+      
+      return afterFromDate && beforeToDate;
+    });
+    
+    // Get repository contents to analyze technologies
+    const { data: contents } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: '',
+    });
+    
+    // Get package.json to analyze dependencies
+    let packageJsonDeps: Record<string, string> = {};
+    try {
+      const contentItems = Array.isArray(contents) ? contents : [contents];
+      const packageJsonFile = contentItems.find((item: any) => item.name === 'package.json');
+      
+      if (packageJsonFile) {
+        const { data: pkgData } = await octokit.repos.getContent({
+          owner,
+          repo,
+          path: packageJsonFile.path,
+        });
+        
+        if (!Array.isArray(pkgData) && 'content' in pkgData) {
+          const packageJson = JSON.parse(
+            Buffer.from(pkgData.content, 'base64').toString('utf-8')
+          );
+          
+          packageJsonDeps = {
+            ...(packageJson.dependencies || {}),
+            ...(packageJson.devDependencies || {})
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error reading package.json:', error);
+    }
+    
+    // Analyze technologies used
+    const technologies = await detectTechnologies(
+      octokit, 
+      owner, 
+      repo, 
+      Array.isArray(contents) ? contents : [contents], 
+      packageJsonDeps
+    );
+    
+    // Map commit data to simplified format
+    const simplifiedCommits = mainBranchCommits.map(commit => ({
+      sha: commit.sha,
+      message: commit.commit.message,
+      date: commit.commit.author.date,
+      author: commit.commit.author.name
+    }));
+    
+    // Map PR data to simplified format
+    const simplifiedPRs = filteredPRs.map(pr => ({
+      number: pr.number,
+      title: pr.title,
+      state: pr.state,
+      createdAt: pr.created_at,
+      mergedAt: pr.merged_at,
+      mergeCommitSha: pr.merge_commit_sha
+    }));
+    
+    return {
+      repositoryName: repo,
+      repositoryDescription: repoData.description,
+      defaultBranch,
+      mainBranchCommits: simplifiedCommits,
+      pullRequests: simplifiedPRs,
+      technologies
+    };
+  } catch (error) {
+    console.error('Error generating changelog context:', error);
+    throw new Error(`Failed to generate changelog context: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }

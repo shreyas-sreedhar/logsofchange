@@ -4,6 +4,8 @@ import { useSession } from 'next-auth/react';
 export interface Repository {
   id: number;
   name: string;
+  fullName: string;
+  url: string;
   stars: number;
   updatedAt: string;
 }

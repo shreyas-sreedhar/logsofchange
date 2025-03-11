@@ -1,58 +1,66 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../auth/[...nextauth]/route';
+import { auth } from '../../../../auth';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
-    if (!session || !session.accessToken) {
+    if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Properly destructure the ID from params
-    const { id } = params;
+    // Get the access token from the session
+    const accessToken = session.accessToken;
     
-    // Fetch repositories to find the one with matching ID
-    const response = await fetch('https://api.github.com/user/repos?per_page=100', {
+    if (!accessToken) {
+      return NextResponse.json({ error: 'GitHub token not found' }, { status: 401 });
+    }
+
+    const { id: repoId } = await params;
+    
+    if (!repoId) {
+      return NextResponse.json({ error: 'Repository ID is required' }, { status: 400 });
+    }
+
+    // Fetch repository details from GitHub API
+    const response = await fetch(`https://api.github.com/repositories/${repoId}`, {
       headers: {
-        'Authorization': `token ${session.accessToken}`,
+        'Authorization': `token ${accessToken}`,
         'Accept': 'application/vnd.github.v3+json'
       }
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      return NextResponse.json({ error: 'Failed to fetch repositories', details: errorData }, { status: response.status });
+      return NextResponse.json({ error: 'Failed to fetch repository', details: errorData }, { status: response.status });
     }
 
-    const repos = await response.json();
+    const repo = await response.json();
     
-    // Find the repository by ID
-    const repo = repos.find((r: any) => r.id.toString() === id);
-    
-    if (!repo) {
-      return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
-    }
-    
-    // Return the simplified repository data
-    return NextResponse.json({
+    // Transform the data to match our Repository interface
+    const transformedRepo = {
       id: repo.id,
       name: repo.name,
       fullName: repo.full_name,
-      description: repo.description,
-      defaultBranch: repo.default_branch,
-      url: repo.html_url,
       owner: {
+        id: repo.owner.id,
         login: repo.owner.login,
-        avatar: repo.owner.avatar_url
-      }
-    });
+        avatarUrl: repo.owner.avatar_url
+      },
+      stars: repo.stargazers_count,
+      updatedAt: repo.updated_at,
+      private: repo.private,
+      description: repo.description,
+      language: repo.language,
+      defaultBranch: repo.default_branch,
+    };
+
+    return NextResponse.json(transformedRepo);
   } catch (error) {
-    console.error('Error fetching repository details:', error);
+    console.error('Error fetching repository:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

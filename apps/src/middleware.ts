@@ -7,6 +7,7 @@ import type { NextRequest } from 'next/server';
 const protectedRoutes = [
   '/api/analyze-repository',
   '/api/changelog/process',
+  '/api/repos',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -36,5 +37,6 @@ export const config = {
   matcher: [
     '/api/analyze-repository/:path*',
     '/api/changelog/:path*',
+    '/api/repos/:path*',
   ],
 };

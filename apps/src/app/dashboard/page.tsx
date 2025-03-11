@@ -1,14 +1,16 @@
 'use client';
 
 import { useSession, signOut } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import StatsCard from "../components/dashboard/StatsCard";
 import RepoCard from "../components/dashboard/RepoCard";
 import { ChartIcon, ClockIcon, LinkIcon } from "../components/Icons";
 import useGithubRepos from "../hooks/useGithubRepos";
 import useChangelogs from "../hooks/useChangelogs";
 import ChangelogCard from "../components/dashboard/ChangelogCard";
-import { useRouter } from "next/navigation";
+import { DashboardShimmer } from "../components/dashboard/ShimmerLoading";
+import Link from "next/link";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -17,7 +19,7 @@ export default function Dashboard() {
   const { changelogs, loading: changelogsLoading, error: changelogsError } = useChangelogs(1, 5);
   const [showAllRepos, setShowAllRepos] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
+  
   const handleGenerateChangelog = (repoId: number) => {
     router.push(`/repository/${repoId}`);
   };
@@ -30,25 +32,23 @@ export default function Dashboard() {
 
   // Show loading state if session is loading
   if (sessionStatus === "loading") {
-    return (
-      <div className="min-h-screen p-8 bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
+    return <DashboardShimmer />;
+  }
+
+  // Show loading state if data is loading
+  if (loading || changelogsLoading) {
+    return <DashboardShimmer />;
   }
 
   // Show error if not authenticated
   if (sessionStatus === "unauthenticated") {
     return (
-      <div className="min-h-screen p-8 bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen p-8 bg-white flex items-center justify-center">
         <div className="text-center max-w-md">
           <h2 className="text-2xl font-bold text-red-600 mb-4">Authentication Required</h2>
           <p className="text-gray-600 mb-6">You need to be signed in to access this dashboard.</p>
-          <a href="/" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Go to Sign In
+          <a href="/" className="px-4 py-2 bg-black text-white rounded-none hover:bg-gray-800">
+            Go to Homepage
           </a>
         </div>
       </div>
@@ -56,155 +56,94 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-blue-600">Dashboard</h1>
-            <p className="text-gray-600">Generate and manage changelogs for your GitHub repositories.</p>
-          </div>
-          <div className="flex gap-4">
-            <button
+    <div className="min-h-screen bg-white">
+      <header className="border-b border-gray-200">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-medium text-black">Dashboard</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-gray-600">
+              {session?.user?.name || session?.user?.email}
+            </span>
+            <button 
               onClick={() => signOut({ callbackUrl: '/' })}
-              className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-100"
+              className="text-gray-600 hover:text-black"
             >
               Sign Out
             </button>
-            <button 
-              onClick={() => router.push('/changelogs')}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              View All Changelogs
-            </button>
           </div>
         </div>
+      </header>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatsCard 
-            title="Total Repositories" 
-            value={loading ? 0 : repos.length} 
-            description="Connected to your GitHub account"
-            icon={<ChartIcon />}
-          />
-          <StatsCard 
-            title="Generated Changelogs" 
-            value={changelogsLoading ? 0 : changelogs.length} 
-            description="Across all repositories"
-            icon={<ClockIcon />}
-          />
-          <StatsCard 
-            title="Active Integrations" 
-            value={3} 
-            description="API connections to websites"
-            icon={<LinkIcon />}
-          />
-        </div>
+      <main className="container mx-auto px-4 py-8">
+        {/* Stats Section */}
+        <section className="mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatsCard 
+              title="Total Repositories" 
+              value={repos.length} 
+              description="Repositories connected to your account"
+              icon={<LinkIcon className="w-5 h-5" />}
+            />
+            <StatsCard 
+              title="Recent Activity" 
+              value={recentRepos.length} 
+              description="Repositories updated in the last 7 days"
+              icon={<ClockIcon className="w-5 h-5" />}
+            />
+            <StatsCard 
+              title="Changelogs Generated" 
+              value={changelogs.length} 
+              description="Total changelogs you've created"
+              icon={<ChartIcon className="w-5 h-5" />}
+            />
+          </div>
+        </section>
 
-        {/* Recent Changelogs */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200 mb-8">
+        {/* Repositories Section */}
+        <section className="mb-10">
           <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-xl font-semibold">Recent Changelogs</h2>
-              <p className="text-gray-600 text-sm">Your most recently generated changelogs.</p>
-            </div>
-            <div>
+            <h2 className="text-xl font-medium text-black">Your Repositories</h2>
+            <div className="flex gap-4">
               <button 
-                onClick={() => router.push('/changelogs')}
-                className="text-blue-600 text-sm font-medium"
+                onClick={() => setShowAllRepos(!showAllRepos)}
+                className="text-gray-600 hover:text-black"
               >
-                View All
+                {showAllRepos ? 'Show Recent' : 'Show All'}
               </button>
-            </div>
-          </div>
-
-          {changelogsLoading ? (
-            <div className="py-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-500">Loading your changelogs...</p>
-            </div>
-          ) : changelogsError ? (
-            <div className="py-8 text-center">
-              <div className="text-red-500 mb-2">Error: {changelogsError}</div>
-            </div>
-          ) : changelogs.length === 0 ? (
-            <div className="py-8 text-center text-gray-500">
-              You haven't generated any changelogs yet. Select a repository below to get started.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {changelogs.map(changelog => (
-                <ChangelogCard key={changelog.id} changelog={changelog} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Recent Repositories */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200 mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-xl font-semibold">Recent Repositories</h2>
-              <p className="text-gray-600 text-sm">Select a repository to generate a changelog.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {!loading && repos.length > 0 && (
-                <button 
-                  onClick={handleRefresh}
-                  disabled={loading || refreshing}
-                  className="text-blue-600 text-sm font-medium flex items-center"
-                  title="Refresh repositories"
-                >
-                  {refreshing ? (
-                    <>
-                      <span className="inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></span>
-                      Refreshing...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9.195 18.44c1.25.713 2.805.715 4.055.002A10.001 10.001 0 0019.938 14H21.75a1.125 1.125 0 000-2.25h-1.813A10.001 10.001 0 0013.5 4.782v2.223a1.125 1.125 0 01-2.25 0V4.782a10.001 10.001 0 00-6.437 6.968H3a1.125 1.125 0 000 2.25h1.813a10.001 10.001 0 006.382 4.44z" />
-                      </svg>
-                      Refresh
-                    </>
-                  )}
-                </button>
-              )}
-              {!loading && repos.length > recentRepos.length && (
-                <button 
-                  onClick={() => setShowAllRepos(!showAllRepos)}
-                  className="text-blue-600 text-sm font-medium"
-                >
-                  {showAllRepos ? 'Show Recent Only' : 'Show All Repositories'}
-                </button>
-              )}
+              <button 
+                onClick={handleRefresh} 
+                disabled={refreshing}
+                className="text-gray-600 hover:text-black disabled:text-gray-400"
+              >
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
             </div>
           </div>
 
           {loading ? (
-            <div className="py-12 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-500">Loading your repositories...</p>
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading repositories...</p>
             </div>
           ) : error ? (
-            <div className="py-8 text-center">
-              <div className="text-red-500 mb-2">Error: {error}</div>
-              <button 
-                onClick={handleRefresh}
-                className="text-blue-600 text-sm font-medium"
-              >
-                Try Again
-              </button>
+            <div className="text-center py-8 text-red-600">
+              <p>Error loading repositories. Please try again.</p>
             </div>
           ) : (showAllRepos ? repos : recentRepos).length === 0 ? (
-            <div className="py-8 text-center text-gray-500">
-              {showAllRepos 
-                ? 'No repositories found. Connect your GitHub account to see your repositories.' 
-                : 'No repositories updated in the past week.'}
+            <div className="text-center py-8 border border-gray-200 p-5">
+              <p className="text-gray-600 mb-4">No repositories found.</p>
+              <a 
+                href="https://github.com/new" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-none font-normal"
+              >
+                Create a Repository
+              </a>
             </div>
           ) : (
-            <div className="space-y-4">
-              {(showAllRepos ? repos : recentRepos).map(repo => (
+            <div className="grid grid-cols-1 gap-4">
+              {(showAllRepos ? repos : recentRepos).map((repo) => (
                 <RepoCard 
                   key={repo.id}
                   name={repo.name}
@@ -215,8 +154,46 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </section>
+
+        {/* Recent Changelogs Section */}
+        <section>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-medium text-black">Recent Changelogs</h2>
+            <Link 
+              href="/changelogs" 
+              className="text-gray-600 hover:text-black flex items-center"
+            >
+              View All
+              <svg className="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+              </svg>
+            </Link>
+          </div>
+
+          {changelogsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading changelogs...</p>
+            </div>
+          ) : changelogsError ? (
+            <div className="text-center py-8 text-red-600">
+              <p>Error loading changelogs. Please try again.</p>
+            </div>
+          ) : changelogs.length === 0 ? (
+            <div className="text-center py-8 border border-gray-200 p-5">
+              <p className="text-gray-600 mb-4">No changelogs generated yet.</p>
+              <p className="text-gray-600 mb-4">Select a repository above to generate your first changelog.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {changelogs.map((changelog) => (
+                <ChangelogCard key={changelog.id} changelog={changelog} />
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
     </div>
   );
 }

@@ -74,3 +74,5 @@ results
 
 /backend/*
 /backend-old/*
+
+*.sql

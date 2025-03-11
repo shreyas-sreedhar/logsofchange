@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { RepositoryShimmer } from '../../components/repository/ShimmerLoading';
+import RepositoryAnalysis from '../../components/RepositoryAnalysis';
+import { ChangelogContext } from '../../lib/repository-analyzer';
+import ChangelogTimeline from '../../components/changelog/ChangelogTimeline';
+import useRepositoryChangelog from '../../hooks/useRepositoryChangelog';
 
 interface CommitData {
   sha: string;
@@ -40,9 +45,20 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
   const [generating, setGenerating] = useState(false);
   const [generationComplete, setGenerationComplete] = useState(false);
   const [dateRange, setDateRange] = useState({
-    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days ago
-    to: new Date().toISOString().split('T')[0], // today
+    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
+    to: new Date().toISOString().split('T')[0] // Today
   });
+  const [repoAnalysis, setRepoAnalysis] = useState<ChangelogContext | null>(null);
+  const [showChangelogSection, setShowChangelogSection] = useState(true);
+  
+  // Fetch repository changelog
+  const { 
+    changelog, 
+    loading: changelogLoading, 
+    error: changelogError,
+    fetchRepoChangelog, 
+    fetchFullChangelog 
+  } = useRepositoryChangelog(id);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -116,32 +132,95 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
     
     try {
       setGenerating(true);
+      setError(null);
+      
+      // First, analyze the repository with OpenAI
+      console.log('Analyzing repository with OpenAI...');
+      const analyzeResponse = await fetch('/api/changelog/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repoId: repo.id,
+          repoName: repo.fullName,
+          repoUrl: `https://github.com/${repo.fullName}`,
+          dateRange: {
+            from: dateRange.from,
+            to: dateRange.to
+          }
+        }),
+        credentials: 'include', // Include cookies for authentication
+      });
+      
+      if (!analyzeResponse.ok) {
+        let analyzeError;
+        try {
+          analyzeError = await analyzeResponse.json();
+        } catch (jsonError) {
+          // If the response is not valid JSON, get the text instead
+          const errorText = await analyzeResponse.text();
+          analyzeError = { error: errorText || 'Unknown error' };
+        }
+        
+        console.error('Repository analysis failed:', analyzeError);
+        // Extract error message if available
+        const errorMessage = analyzeError.error || 'Unknown error occurred during repository analysis';
+        console.error('Error message:', errorMessage);
+        // Continue with regular changelog generation if analysis fails
+        console.log('Falling back to standard changelog generation...');
+      } else {
+        const analyzeData = await analyzeResponse.json();
+        console.log('Repository analysis successful:', analyzeData);
+        
+        // If analysis was successful and returned a changelog ID, fetch the changelog
+        if (analyzeData.changelogId) {
+          console.log('Changelog generated, fetching data...');
+          await fetchFullChangelog(analyzeData.changelogId);
+          setGenerationComplete(true);
+          return;
+        }
+      }
+      
+      // If analysis didn't complete or didn't return a changelog ID, proceed with regular generation
+      console.log('Proceeding with standard changelog generation...');
       
       // Data to save to Supabase
       const changelogData = {
         repoId: repo.id,
-        repoName: repo.name,
+        repoName: repo.fullName,
         dateRange: dateRange,
         commits: commits,
         generatedAt: new Date().toISOString(),
       };
       
-      // Save to Supabase
+      console.log('Sending changelog data:', JSON.stringify(changelogData, null, 2));
+      
+      // Save to Supabase via API
       const response = await fetch('/api/changelog/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(changelogData),
+        credentials: 'include', // Include cookies for authentication
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate changelog');
+        console.error('Error response:', data);
+        throw new Error(data.error || `Failed to generate changelog: ${response.status} ${response.statusText}`);
       }
       
+      console.log('Changelog generation successful:', data);
+      if (data.changelogId) {
+        await fetchFullChangelog(data.changelogId);
+      } else {
+        // Refresh the changelog list if we don't get a specific ID
+        fetchRepoChangelog();
+      }
       setGenerationComplete(true);
-      setTimeout(() => router.push('/dashboard'), 2000); // Redirect after 2 seconds
     } catch (err) {
       console.error('Error generating changelog:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate changelog');
@@ -150,16 +229,19 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
     }
   };
 
+  // Handle completed repository analysis
+  const handleAnalysisComplete = (analysis: ChangelogContext) => {
+    setRepoAnalysis(analysis);
+  };
+
   // Loading state for session
   if (sessionStatus === 'loading') {
-    return (
-      <div className="min-h-screen p-8 bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <RepositoryShimmer />;
+  }
+
+  // Loading state for repository data
+  if (loading) {
+    return <RepositoryShimmer />;
   }
 
   return (
@@ -175,8 +257,6 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
           
           {repo ? (
             <h1 className="text-2xl font-bold">{repo.name}</h1>
-          ) : loading ? (
-            <div className="h-8 w-64 bg-gray-200 rounded animate-pulse"></div>
           ) : (
             <h1 className="text-2xl font-bold text-red-600">Repository Not Found</h1>
           )}
@@ -194,65 +274,130 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
           </div>
         )}
 
+        {/* Repository Analysis Component */}
+        <RepositoryAnalysis
+          repoId={id}
+          repoName={repo?.fullName || ''}
+          fromDate={dateRange.from}
+          toDate={dateRange.to}
+          onAnalysisComplete={handleAnalysisComplete}
+          hideAnalyzeButton={true}
+        />
+
         {/* Date range selection */}
         <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Generate Changelog</h2>
+          <h2 className="text-lg font-medium mb-4">Select Date Range</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+              <label htmlFor="from-date" className="block text-sm text-gray-600 mb-1">From</label>
               <input
+                id="from-date"
                 type="date"
+                className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
                 value={dateRange.from}
-                onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-                className="w-full p-2 border border-gray-300 rounded"
-                disabled={loading || generating}
+                onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+              <label htmlFor="to-date" className="block text-sm text-gray-600 mb-1">To</label>
               <input
+                id="to-date"
                 type="date"
+                className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
                 value={dateRange.to}
-                onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-                className="w-full p-2 border border-gray-300 rounded"
-                disabled={loading || generating}
+                onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
               />
             </div>
           </div>
-          
-          <div className="flex justify-end">
-            <button
-              onClick={fetchCommits}
-              disabled={loading || generating || !repo}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-3 hover:bg-gray-300 disabled:opacity-50"
-            >
-              Refresh Commits
-            </button>
-            <button
-              onClick={generateChangelog}
-              disabled={loading || generating || commits.length === 0}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center"
-            >
-              {generating ? (
-                <>
-                  <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
-                  Generating...
-                </>
-              ) : generationComplete ? (
-                <>
-                  <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
-                  </svg>
-                  Generated!
-                </>
-              ) : (
-                'Generate Changelog'
-              )}
-            </button>
-          </div>
+          <button 
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={fetchCommits}
+          >
+            Update Date Range
+          </button>
         </div>
 
-        {/* Commits preview */}
+        {/* Changelog Section */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-medium">Repository Changelog</h2>
+            <div>
+              {changelog && (
+                <Link
+                  href={`/repository/${id}/changelog`}
+                  className="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-none font-normal mr-3"
+                >
+                  View Full Changelog
+                </Link>
+              )}
+              {!changelogLoading && !changelog && (
+                <button
+                  onClick={generateChangelog}
+                  disabled={generating || !repo || commits.length === 0}
+                  className={`
+                    ${generating ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800'} 
+                    text-white px-4 py-2 rounded-none font-normal
+                  `}
+                >
+                  {generating ? 'Generating...' : 'Generate Changelog'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showChangelogSection && (
+            <div>
+              {changelogLoading ? (
+                <div className="text-center py-8 bg-white p-6 border border-gray-200">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading changelog...</p>
+                </div>
+              ) : changelogError ? (
+                <div className="text-center py-8 bg-white p-6 border border-gray-200">
+                  <p className="text-red-600 mb-4">{changelogError}</p>
+                  <button
+                    onClick={() => fetchRepoChangelog()}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : changelog ? (
+                <div className="bg-white p-6 border border-gray-200">
+                  <p className="mb-4">This repository has a changelog with {changelog.commit_count} commits.</p>
+                  <Link
+                    href={`/repository/${id}/changelog`}
+                    className="text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    View full changelog
+                    <svg className="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </Link>
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-white p-6 border border-gray-200">
+                  <p className="text-gray-600 mb-4">No changelog has been generated for this repository yet.</p>
+                  <button
+                    onClick={generateChangelog}
+                    disabled={generating || !repo || commits.length === 0}
+                    className={`
+                      ${generating ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800'} 
+                      text-white px-4 py-2 rounded-none font-normal
+                    `}
+                  >
+                    {generating ? 'Generating...' : 'Generate Changelog'}
+                  </button>
+                  {generationComplete && (
+                    <p className="text-green-600 mt-2">Changelog generated successfully!</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Commits section */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
           <h2 className="text-xl font-semibold mb-4">Commits ({commits.length})</h2>
           

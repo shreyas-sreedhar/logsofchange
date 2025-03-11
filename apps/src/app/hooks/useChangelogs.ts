@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { ChangelogContext } from '../lib/repository-analyzer';
 
 export interface Changelog {
   id: string;
@@ -12,6 +13,7 @@ export interface Changelog {
   processed_at: string | null;
   status: 'processing' | 'completed' | 'failed';
   processed_changelog: string | null;
+  repository_context?: ChangelogContext;
 }
 
 export interface ChangelogPagination {
