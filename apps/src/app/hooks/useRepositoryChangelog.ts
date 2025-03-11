@@ -4,15 +4,16 @@ import { Changelog } from './useChangelogs';
 
 export default function useRepositoryChangelog(repoId: number | string) {
   const { data: session, status } = useSession();
-  const [changelog, setChangelog] = useState<Changelog | null>(null);
+  const [changelogs, setChangelogs] = useState<Changelog[]>([]);
+  const [selectedChangelog, setSelectedChangelog] = useState<Changelog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Convert repoId to string if it's a number
   const formattedRepoId = typeof repoId === 'number' ? repoId.toString() : repoId;
   
-  // Function to fetch changelog for this specific repository
-  const fetchRepoChangelog = useCallback(async () => {
+  // Function to fetch changelogs for this specific repository
+  const fetchRepoChangelogs = useCallback(async () => {
     if (status !== 'authenticated' || !formattedRepoId) return;
     
     setLoading(true);
@@ -23,22 +24,25 @@ export default function useRepositoryChangelog(repoId: number | string) {
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch changelog');
+        throw new Error(errorData.error || 'Failed to fetch changelogs');
       }
       
       const data = await response.json();
       
-      // Get the most recent changelog for this repository
+      // Store all changelogs for this repository
       if (data.changelogs && data.changelogs.length > 0) {
-        setChangelog(data.changelogs[0]);
+        setChangelogs(data.changelogs);
+        // Set the most recent changelog as the selected one by default
+        setSelectedChangelog(data.changelogs[0]);
       } else {
-        setChangelog(null);
+        setChangelogs([]);
+        setSelectedChangelog(null);
       }
       
       setError(null);
     } catch (err) {
-      console.error('Error fetching repository changelog:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch changelog');
+      console.error('Error fetching repository changelogs:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch changelogs');
     } finally {
       setLoading(false);
     }
@@ -57,7 +61,7 @@ export default function useRepositoryChangelog(repoId: number | string) {
       }
       
       const fullChangelog = await response.json();
-      setChangelog(fullChangelog);
+      setSelectedChangelog(fullChangelog);
       return fullChangelog;
     } catch (err) {
       console.error(`Error fetching full changelog:`, err);
@@ -66,18 +70,31 @@ export default function useRepositoryChangelog(repoId: number | string) {
     }
   }, [status]);
 
+  // Function to select a specific changelog from the list
+  const selectChangelog = useCallback((changelogId: string) => {
+    const changelog = changelogs.find(cl => cl.id === changelogId);
+    if (changelog) {
+      setSelectedChangelog(changelog);
+    } else {
+      // If not found in the current list, fetch it
+      fetchFullChangelog(changelogId);
+    }
+  }, [changelogs, fetchFullChangelog]);
+
   // Fetch data on initial load or when dependencies change
   useEffect(() => {
     if (status === 'authenticated') {
-      fetchRepoChangelog();
+      fetchRepoChangelogs();
     }
-  }, [fetchRepoChangelog, status]);
+  }, [fetchRepoChangelogs, status]);
 
   return {
-    changelog,
+    changelogs,
+    selectedChangelog,
     loading,
     error,
-    fetchRepoChangelog,
+    fetchRepoChangelogs,
     fetchFullChangelog,
+    selectChangelog
   };
 } 

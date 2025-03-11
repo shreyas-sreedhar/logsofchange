@@ -110,30 +110,63 @@ export async function POST(request: NextRequest) {
     console.log(`✅ [CHANGELOG PROCESS] OpenAI generation completed successfully`);
     console.log(`📝 [CHANGELOG PROCESS] Generated changelog length: ${processedChangelog.length} characters`);
 
-    // Update the changelog record with the processed content
-    console.log(`📝 [CHANGELOG PROCESS] Updating changelog record in database`);
+    // Create a new changelog record with the processed content instead of updating the existing one
+    console.log(`📝 [CHANGELOG PROCESS] Creating new changelog record in database`);
+    
+    // First, get the repository ID from the current changelog
+    const repoId = changelog.repo_id;
+    const repoName = changelog.repo_name;
+    const fromDate = changelog.from_date;
+    const toDate = changelog.to_date;
+    const rawData = changelog.raw_data;
+    const commitCount = changelog.commit_count;
+    
+    // Create a new changelog record
+    const { data: newChangelog, error: insertError } = await supabase
+      .from('changelogs')
+      .insert({
+        user_id: userId,
+        repo_id: repoId,
+        repo_name: repoName,
+        from_date: fromDate,
+        to_date: toDate,
+        raw_data: rawData,
+        processed_changelog: processedChangelog,
+        status: 'completed',
+        commit_count: commitCount,
+        generated_at: new Date().toISOString(),
+        processed_at: new Date().toISOString(),
+        ...(repositoryContext ? { repository_context: repositoryContext } : {})
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      console.error('❌ [CHANGELOG PROCESS] Error creating new changelog:', insertError);
+      return NextResponse.json({ error: 'Failed to create new changelog data' }, { status: 500 });
+    }
+    console.log(`✅ [CHANGELOG PROCESS] New changelog record created successfully with ID: ${newChangelog.id}`);
+    
+    // Update the status of the original changelog to indicate it's been processed
+    console.log(`📝 [CHANGELOG PROCESS] Updating original changelog status`);
     const { error: updateError } = await supabase
       .from('changelogs')
       .update({
-        processed_changelog: processedChangelog,
-        status: 'completed',
-        processed_at: new Date().toISOString(),
-        ...(repositoryContext ? { repository_context: repositoryContext } : {})
+        status: 'completed'
       })
       .eq('id', changelogId);
 
     if (updateError) {
-      console.error('❌ [CHANGELOG PROCESS] Error updating changelog:', updateError);
-      return NextResponse.json({ error: 'Failed to update changelog data' }, { status: 500 });
+      console.error('❌ [CHANGELOG PROCESS] Error updating original changelog status:', updateError);
+      // Non-blocking error, continue with the response
     }
-    console.log(`✅ [CHANGELOG PROCESS] Changelog record updated successfully`);
 
-    // Return success response
-    console.log(`✅ [CHANGELOG PROCESS] Processing completed successfully for changelog ID: ${changelogId}`);
+    // Return success response with the new changelog ID
+    console.log(`✅ [CHANGELOG PROCESS] Processing completed successfully for changelog ID: ${newChangelog.id}`);
     return NextResponse.json({
       success: true,
       message: 'Changelog processed successfully',
-      changelogId: changelogId,
+      changelogId: newChangelog.id,
       changelog: processedChangelog
     });
   } catch (error) {
@@ -276,3 +309,4 @@ ${commitSummaries}
     throw new Error('Failed to generate changelog with OpenAI');
   }
 }
+

@@ -134,10 +134,12 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   const { 
-    changelog, 
+    changelogs,
+    selectedChangelog,
     loading: changelogLoading, 
     error: changelogError,
-    fetchRepoChangelog
+    fetchRepoChangelogs,
+    selectChangelog
   } = useRepositoryChangelog(resolvedParams.id);
   
   // Redirect to login if not authenticated
@@ -175,9 +177,11 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
   }, [resolvedParams.id, sessionStatus]);
   
   const handleDelete = async () => {
+    if (!selectedChangelog) return;
+    
     try {
       setIsDeleting(true);
-      const response = await fetch(`/api/changelog/${changelog?.id}`, {
+      const response = await fetch(`/api/changelog/${selectedChangelog.id}`, {
         method: 'DELETE',
       });
 
@@ -185,13 +189,26 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
         throw new Error('Failed to delete changelog');
       }
 
-      router.push(`/repository/${resolvedParams.id}`);
+      // Refresh the changelogs list
+      fetchRepoChangelogs();
+      setShowDeleteModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete changelog');
     } finally {
       setIsDeleting(false);
-      setShowDeleteModal(false);
     }
+  };
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
   
   // Loading state
@@ -254,27 +271,14 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
             Back to Repository
           </Link>
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{repoName} Changelog</h1>
-            {changelog && (
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                disabled={isDeleting}
-                className={`px-4 py-2 rounded text-sm font-medium ${
-                  isDeleting
-                    ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
-                    : 'bg-red-600 hover:bg-red-700 dark:hover:bg-red-500 text-white'
-                }`}
-              >
-                Delete
-              </button>
-            )}
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{repoName} Changelogs</h1>
           </div>
         </div>
         
         {changelogLoading ? (
           <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black dark:border-white mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading changelog...</p>
+            <p className="text-gray-600 dark:text-gray-400">Loading changelogs...</p>
           </div>
         ) : changelogError ? (
           <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
@@ -286,23 +290,85 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
               Try Again
             </button>
           </div>
-        ) : changelog ? (
-          <>
-            {/* Add API access component */}
-            <div className="mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Changelog Details</h2>
-                <div className="text-gray-600 dark:text-gray-400 text-sm">
-                  <span>Generated on {new Date(changelog.generated_at).toLocaleDateString()}</span>
-                </div>
+        ) : changelogs.length > 0 ? (
+          <div className="grid grid-cols-1 gap-6">
+            {/* Changelog List */}
+            <div className="bg-white dark:bg-gray-950 p-5 border border-gray-200 dark:border-gray-800 shadow-md rounded-lg">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Available Changelogs</h2>
+              <div className="overflow-hidden border border-gray-200 dark:border-gray-800 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                  <thead className="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Date Range
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Generated
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Commits
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
+                    {changelogs.map((changelog) => (
+                      <tr 
+                        key={changelog.id} 
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer ${
+                          selectedChangelog?.id === changelog.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                        }`}
+                        onClick={() => selectChangelog(changelog.id)}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          {new Date(changelog.from_date).toLocaleDateString()} - {new Date(changelog.to_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {formatDate(changelog.generated_at)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {changelog.commit_count}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectChangelog(changelog.id);
+                              setShowDeleteModal(true);
+                            }}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <ChangelogApiAccess changelogId={changelog.id} />
             </div>
-            <ChangelogTimeline changelog={changelog} />
-          </>
+            
+            {/* Selected Changelog */}
+            {selectedChangelog && (
+              <div>
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Changelog Details</h2>
+                    <div className="text-gray-600 dark:text-gray-400 text-sm">
+                      <span>Generated on {new Date(selectedChangelog.generated_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <ChangelogApiAccess changelogId={selectedChangelog.id} />
+                </div>
+                <ChangelogTimeline changelog={selectedChangelog} />
+              </div>
+            )}
+          </div>
         ) : (
           <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
-            <p className="text-gray-600 dark:text-gray-400 mb-4">No changelog has been generated for this repository yet.</p>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">No changelogs have been generated for this repository yet.</p>
             <Link 
               href={`/repository/${resolvedParams.id}`}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-500"
