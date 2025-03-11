@@ -14,6 +14,7 @@ export interface Changelog {
   status: 'processing' | 'completed' | 'failed';
   processed_changelog: string | null;
   repository_context?: ChangelogContext;
+  is_public?: boolean;
 }
 
 export interface ChangelogPagination {

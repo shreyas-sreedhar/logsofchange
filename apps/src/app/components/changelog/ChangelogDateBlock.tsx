@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
 
 interface ChangelogEntry {
   title: string;
@@ -95,17 +96,12 @@ export default function ChangelogDateBlock({ date, entries }: ChangelogDateBlock
                     {/* Title */}
                     <h3 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-2">{entry.title}</h3>
                     
-                    {/* Description as bullet points */}
-                    <ul className="mb-3 space-y-2">
-                      {entry.description.split('\n')
-                        .filter(line => line.trim().length > 0)
-                        .map((point, pointIndex) => (
-                          <li key={pointIndex} className="flex">
-                            <span className="text-gray-900 dark:text-gray-100 mr-2">-</span>
-                            <span className="text-gray-600 dark:text-gray-400">{point}</span>
-                          </li>
-                      ))}
-                    </ul>
+                    {/* Description with markdown support */}
+                    <div className="mb-3 prose dark:prose-invert prose-sm max-w-none">
+                      <ReactMarkdown>
+                        {entry.description}
+                      </ReactMarkdown>
+                    </div>
                     
                     {/* Issue references */}
                     {entry.issueNumbers && entry.issueNumbers.length > 0 && (

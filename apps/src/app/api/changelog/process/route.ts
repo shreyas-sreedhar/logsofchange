@@ -215,29 +215,49 @@ ${repoContext.mainBranchCommits.slice(0, 10).map(commit =>
     }
 
     const prompt = `
-Generate a well-formatted changelog in Markdown for the repository "${repoName}" based on commit data from ${fromDate} to ${toDate}.
+Generate a well-formatted changelog in Markdown for "${repoName}" based on commits from ${fromDate} to ${toDate}.
+
+### Change Summary
+- **Total Commits**: ${commits.length}
+- **Contributors**: ${new Set(commits.map(commit => commit.author)).size}
+- **Referenced Issues**: ${Array.from(new Set(commits.flatMap(commit => commit.message.match(/#(\d+)/g) || []))).join(', ') || 'None'}
 
 ${contextPrompt}
 
-Below is the raw commit data to process:
-
+### Raw Commit Data
 ${commitSummaries}
 
-Using this data, create a professional changelog with the following sections:
-- **Date**: The date of the changelog.
+### Required Format
+# Changelog - ${new Date().toISOString().split('T')[0]}
 
-- **Summary of Changes**: A concise overview of the updates in this period, very concise and technical.
-- **New Features**: List of added features, with brief descriptions.
-- **Bug Fixes**: List of resolved issues, with short explanations.
-- **Other Improvements**: Enhancements or optimizations not covered above.
-- **Breaking Changes**: Any changes that might affect existing users or integrations (include "None" if there are none).
+## Summary of Changes
+[A brief, technical overview of the main changes in this period]
 
-Guidelines:
-- Format the output in clean, readable Markdown with appropriate headings (e.g., ## for sections).
-- Use bullet points (- or *) for lists within each section.
-- Categorize commits intelligently based on their content (e.g., "feat:" for features, "fix:" for bugs).
-- If the commit data lacks context, make reasonable assumptions or note where clarification is needed.
-- Ensure the tone is professional and suitable for a public-facing changelog.
+## New Features
+- Feature 1: Description (Commit: hash)
+- Feature 2: Description (Commit: hash)
+
+## Bug Fixes
+- Fix 1: Description (Commit: hash)
+- Fix 2: Description (Commit: hash)
+
+## Other Improvements
+- Improvement 1: Description (Commit: hash)
+- Improvement 2: Description (Commit: hash)
+
+## Breaking Changes
+- Change 1: Description (Commit: hash)
+[Include "None" if there are no breaking changes]
+
+### Guidelines
+1. Use ONLY the format shown above
+2. Do not create additional sections or alternative formats
+3. Group related commits under appropriate sections
+4. Include commit hashes in parentheses
+5. Keep descriptions concise and technical
+6. Skip trivial commits (e.g., "wip", "cleanup")
+7. Focus on user-facing changes
+8. Use consistent punctuation
 `;
 
     console.log(`📝 [OPENAI] Prompt prepared, length: ${prompt.length} characters`);
@@ -262,7 +282,6 @@ Guidelines:
     
     const result = completion.choices[0].message.content || 'Failed to generate changelog';
     console.log(`✅ [OPENAI] Changelog generated successfully, length: ${result.length} characters`);
-    
     return { 
       processedChangelog: result,
       repositoryContext: repoContext
@@ -272,3 +291,151 @@ Guidelines:
     throw new Error('Failed to generate changelog with OpenAI');
   }
 } 
+
+
+
+
+const test = 0;
+// async function generateChangelog(
+//   repoName: string,
+//   commits: Array<{
+//     message: string;
+//     author: string;
+//     date: string;
+//     changedFiles: Array<{
+//       filename: string;
+//       status: string;
+//       additions: number;
+//       deletions: number;
+//     }>;
+//   }>,
+//   fromDate: string,
+//   toDate: string
+// ): Promise<{ processedChangelog: string; repositoryContext: any | null }> {
+//   // Summarize commits
+//   const commitSummaries = commits
+//     .map((commit) => {
+//       const fileChanges = commit.changedFiles
+//         .map((file) => `${file.filename} (${file.status}, +${file.additions}, -${file.deletions})`)
+//         .join('\n    - ');
+//       return `* ${commit.message} (${commit.author}, ${commit.date})\n    - Changed files:\n    - ${fileChanges}`;
+//     })
+//     .join('\n\n');
+
+//   // Extract issue references
+//   const issueRefs = new Set<string>();
+//   const issueRegex = /#(\d+)/g;
+//   for (const commit of commits) {
+//     const matches = commit.message.match(issueRegex);
+//     if (matches) matches.forEach((match) => issueRefs.add(match));
+//   }
+//   const referencedIssues = Array.from(issueRefs).join(', ');
+
+//   // Calculate statistics
+//   const totalCommits = commits.length;
+//   const contributors = new Set(commits.map((commit) => commit.author));
+//   const totalContributors = contributors.size;
+
+//   // Fetch repository context (assumed function)
+//   let repoContext = null;
+//   try {
+//     const session = await auth();
+//     if (session?.accessToken) {
+//       const [owner, repo] = repoName.split('/');
+//       repoContext = await getChangelogContext(session.accessToken, owner, repo, fromDate, toDate);
+//     }
+//   } catch (error) {
+//     console.warn('Failed to fetch context:', error);
+//   }
+
+//   // Build context prompt
+//   const contextPrompt = repoContext
+//     ? `
+// ### Repository Context
+// - **Name**: ${repoContext.repositoryName}
+// ${repoContext.repositoryDescription ? `- **Description**: ${repoContext.repositoryDescription}` : ''}
+// - **Default Branch**: ${repoContext.defaultBranch}
+// - **Technologies**: ${repoContext.technologies.join(', ')}
+
+// #### Notable Pull Requests (Top 10)
+// ${repoContext.pullRequests.slice(0, 10).map((pr: any) => 
+//   `- #${pr.number}: ${pr.title} (${pr.state}, merged: ${pr.mergedAt || 'N/A'})`
+// ).join('\n')}
+
+// #### Recent Main Branch Commits (Top 10)
+// ${repoContext.mainBranchCommits.slice(0, 10).map((commit: any) => 
+//   `- ${commit.sha.slice(0, 7)}: ${commit.message.split('\n')[0]} (${commit.author}, ${commit.date})`
+// ).join('\n')}
+// `
+//     : '';
+
+//   // Construct the prompt
+//   const prompt = `
+// Generate a professional changelog in Markdown for "${repoName}" based on commits from ${fromDate} to ${toDate}.
+
+// ### Change Summary
+// - **Total Commits**: ${totalCommits}
+// - **Contributors**: ${totalContributors}
+// - **Referenced Issues**: ${referencedIssues || 'None'}
+
+// ${contextPrompt}
+
+// ### Raw Commit Data
+// ${commitSummaries}
+
+// ### Instructions
+// Create a changelog with these sections:
+// - **Date**: Use ${new Date().toISOString().split('T')[0]}.
+// - **Summary of Changes**: A brief, technical overview of updates.
+// - **New Features**: Added functionality (e.g., "feat:", "add").
+// - **Bug Fixes**: Resolved issues (e.g., "fix:", "resolve").
+// - **Other Improvements**: Enhancements like refactors or dependency updates.
+// - **Breaking Changes**: Impactful changes (e.g., API changes). Use "None" if none.
+
+// ### Guidelines
+// - Use Markdown with ## for sections, - for items.
+// - Categorize commits by prefixes or keywords.
+// - Group related commits.
+// - Include issue numbers (e.g., #123) where relevant.
+// - Highlight significant updates (e.g., dependencies, breaking changes).
+// - Keep concise and professional.
+// - Ignore trivial commits (e.g., "Merge branch") unless significant.
+
+// ### Example
+// \`\`\`
+// ## Changelog - 2023-10-01
+
+// ### Summary of Changes
+// This release enhances user experience with new features and fixes.
+
+// ### New Features
+// - Added OAuth authentication (#42)
+// - Implemented dark mode (#45)
+
+// ### Bug Fixes
+// - Fixed crash with large datasets (#50)
+// - Corrected typo in settings (#52)
+
+// ### Other Improvements
+// - Updated React to 18.0.0
+// - Optimized queries
+
+// ### Breaking Changes
+// - Removed '/old-api'; use '/new-api'
+// \`\`\`
+// `;
+
+//   // Call OpenAI
+//   const completion = await openai.chat.completions.create({
+//     model: 'gpt-4',
+//     messages: [
+//       { role: 'system', content: 'You are an expert at crafting professional changelogs.' },
+//       { role: 'user', content: prompt },
+//     ],
+//     temperature: 0.7,
+//     max_tokens: 1500,
+//   });
+
+//   const changelog = completion.choices[0].message.content || 'Error: No changelog generated';
+//   return { processedChangelog: changelog, repositoryContext: repoContext };
+// }

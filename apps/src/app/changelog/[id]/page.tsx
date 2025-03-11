@@ -7,6 +7,7 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { Changelog } from '../../hooks/useChangelogs';
 import { use } from 'react';
+import { ChangelogEmbed } from '../../components/changelog/ChangelogEmbed';
 
 // Add this before the main component
 interface RepositoryContextProps {
@@ -65,12 +66,14 @@ function RepositoryContext({ repoName, technologies, pullRequests }: RepositoryC
 export default function ChangelogPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
+  const resolvedParams = React.use(params);
   const [changelog, setChangelog] = useState<Changelog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Unwrap the params Promise
-  const resolvedParams = use(params);
   const changelogId = resolvedParams.id;
 
   // Get the changelog ID from params
@@ -144,6 +147,53 @@ export default function ChangelogPage({ params }: { params: Promise<{ id: string
     };
   }, [changelog, resolvedParams.id]);
 
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this changelog? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/changelog/${resolvedParams.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete changelog');
+      }
+
+      router.push('/changelogs');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete changelog');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    try {
+      setIsRegenerating(true);
+      const response = await fetch(`/api/changelog/${resolvedParams.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'regenerate' }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to regenerate changelog');
+      }
+
+      // Refresh the page to show the regenerating status
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate changelog');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -201,27 +251,29 @@ export default function ChangelogPage({ params }: { params: Promise<{ id: string
               <h1 className="text-2xl font-bold mb-2">{changelog.repo_name}</h1>
               <p className="text-gray-600">{dateRange}</p>
             </div>
-            <div className="flex items-center">
-              {changelog.status === 'processing' ? (
-                <div className="flex items-center">
-                  <span className="inline-block w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mr-2"></span>
-                  <span className="text-yellow-500">Processing...</span>
-                </div>
-              ) : changelog.status === 'completed' ? (
-                <div className="text-green-500 flex items-center">
-                  <svg className="w-5 h-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
-                  </svg>
-                  Completed
-                </div>
-              ) : (
-                <div className="text-red-500 flex items-center">
-                  <svg className="w-5 h-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clipRule="evenodd" />
-                  </svg>
-                  Failed
-                </div>
-              )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleRegenerate}
+                disabled={isRegenerating || changelog?.status === 'processing'}
+                className={`px-4 py-2 rounded text-sm font-medium ${
+                  isRegenerating || changelog?.status === 'processing'
+                    ? 'bg-gray-300 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {isRegenerating ? 'Regenerating...' : 'Regenerate'}
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className={`px-4 py-2 rounded text-sm font-medium ${
+                  isDeleting
+                    ? 'bg-gray-300 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-700 text-white'
+                }`}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
           
@@ -290,6 +342,13 @@ export default function ChangelogPage({ params }: { params: Promise<{ id: string
               </li>
             </ul>
           </div>
+          
+          {/* Add the ChangelogEmbed component */}
+          <ChangelogEmbed 
+            changelogId={changelogId} 
+            repoName={changelog.repo_name}
+            isPublic={changelog.is_public}
+          />
         </div>
       </div>
     </div>

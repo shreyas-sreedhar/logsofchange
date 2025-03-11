@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import ChangelogTimeline from '../../../components/changelog/ChangelogTimeline';
 import useRepositoryChangelog from '../../../hooks/useRepositoryChangelog';
+import Modal from '../../../components/Modal';
 
 export default function RepositoryChangelogPage({ params }: { params: Promise<{ id: string }> }) {
   // Unwrap the params Promise
@@ -16,11 +17,14 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
   const [repoName, setRepoName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   const { 
     changelog, 
     loading: changelogLoading, 
-    error: changelogError
+    error: changelogError,
+    fetchRepoChangelog
   } = useRepositoryChangelog(resolvedParams.id);
   
   // Redirect to login if not authenticated
@@ -56,6 +60,26 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
     
     fetchRepoDetails();
   }, [resolvedParams.id, sessionStatus]);
+  
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/changelog/${changelog?.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete changelog');
+      }
+
+      router.push(`/repository/${resolvedParams.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete changelog');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  };
   
   // Loading state
   if (sessionStatus === 'loading' || loading) {
@@ -98,6 +122,16 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
   
   return (
     <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        title="Delete Changelog"
+        message="Are you sure you want to delete this changelog? This action cannot be undone."
+        confirmText={isDeleting ? "Deleting..." : "Delete"}
+        isDestructive={true}
+      />
+      
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <Link href={`/repository/${resolvedParams.id}`} className="text-blue-600 dark:text-blue-400 flex items-center mb-2">
@@ -106,7 +140,22 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
             </svg>
             Back to Repository
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{repoName} Changelog</h1>
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{repoName} Changelog</h1>
+            {changelog && (
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                disabled={isDeleting}
+                className={`px-4 py-2 rounded text-sm font-medium ${
+                  isDeleting
+                    ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-700 dark:hover:bg-red-500 text-white'
+                }`}
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
         
         {changelogLoading ? (

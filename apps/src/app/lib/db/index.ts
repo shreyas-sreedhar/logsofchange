@@ -40,6 +40,7 @@ export interface Changelog {
   generated_at: string;
   processed_at: string | null;
   created_at: string;
+  is_public: boolean;
 }
 
 export interface ChangelogInput {
