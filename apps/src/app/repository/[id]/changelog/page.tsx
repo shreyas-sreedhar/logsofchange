@@ -8,6 +8,119 @@ import ChangelogTimeline from '../../../components/changelog/ChangelogTimeline';
 import useRepositoryChangelog from '../../../hooks/useRepositoryChangelog';
 import Modal from '../../../components/Modal';
 
+// Add new component for API access
+const ChangelogApiAccess = ({ changelogId }: { changelogId: string }) => {
+  const [showApiInfo, setShowApiInfo] = useState(false);
+  const [copied, setCopied] = useState(false);
+  
+  const apiEndpoint = `/api/changelog/${changelogId}`;
+  
+  const handleCopy = () => {
+    navigator.clipboard.writeText(`${window.location.origin}${apiEndpoint}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  
+  return (
+    <div className="mb-6 bg-white dark:bg-gray-950 p-5 border border-gray-200 dark:border-gray-800 shadow-md rounded-lg">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">API Access</h3>
+        <button
+          onClick={() => setShowApiInfo(!showApiInfo)}
+          className="text-blue-600 dark:text-blue-400 flex items-center text-sm font-medium"
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className="h-4 w-4 mr-1" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d={showApiInfo ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} 
+            />
+          </svg>
+          {showApiInfo ? 'Hide Details' : 'Show Details'}
+        </button>
+      </div>
+      
+      {!showApiInfo && (
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          Access this changelog programmatically via our API. Click "Show Details" for more information.
+        </p>
+      )}
+      
+      {showApiInfo && (
+        <div className="mt-4">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">API Endpoint</h4>
+          <div className="flex items-center">
+            <code className="text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded flex-1 overflow-x-auto">
+              {window.location.origin}{apiEndpoint}
+            </code>
+            <button
+              onClick={handleCopy}
+              className="ml-2 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+              title="Copy to clipboard"
+            >
+              {copied ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                </svg>
+              )}
+            </button>
+          </div>
+          <div className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+            <div className="mb-3">
+              <h5 className="font-medium mb-1">Authentication</h5>
+              <p>This API requires authentication. You can use your session cookie or an API token.</p>
+            </div>
+            
+            <div className="mb-3">
+              <h5 className="font-medium mb-1">Example with Session (Browser)</h5>
+              <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-x-auto">
+{`fetch("${window.location.origin}${apiEndpoint}", {
+  method: "GET",
+  credentials: "include"
+})
+.then(response => response.json())
+.then(data => console.log(data));`}
+              </pre>
+            </div>
+            
+            <div className="mb-3">
+              <h5 className="font-medium mb-1">Example with API Token (Server)</h5>
+              <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-x-auto">
+{`curl -H "Authorization: Bearer YOUR_API_TOKEN" ${window.location.origin}${apiEndpoint}`}
+              </pre>
+            </div>
+            
+            <div>
+              <h5 className="font-medium mb-1">Response Format</h5>
+              <p>JSON containing the full changelog data including:</p>
+              <ul className="list-disc list-inside mt-1 ml-2">
+                <li>id: Unique identifier</li>
+                <li>repo_name: Repository name</li>
+                <li>processed_changelog: Formatted changelog content</li>
+                <li>raw_data: Raw commit data</li>
+                <li>generated_at: Timestamp</li>
+                <li>status: Processing status</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function RepositoryChangelogPage({ params }: { params: Promise<{ id: string }> }) {
   // Unwrap the params Promise
   const resolvedParams = React.use(params);
@@ -174,7 +287,19 @@ export default function RepositoryChangelogPage({ params }: { params: Promise<{ 
             </button>
           </div>
         ) : changelog ? (
-          <ChangelogTimeline changelog={changelog} />
+          <>
+            {/* Add API access component */}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Changelog Details</h2>
+                <div className="text-gray-600 dark:text-gray-400 text-sm">
+                  <span>Generated on {new Date(changelog.generated_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+              <ChangelogApiAccess changelogId={changelog.id} />
+            </div>
+            <ChangelogTimeline changelog={changelog} />
+          </>
         ) : (
           <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
             <p className="text-gray-600 dark:text-gray-400 mb-4">No changelog has been generated for this repository yet.</p>

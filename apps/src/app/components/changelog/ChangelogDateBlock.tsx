@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 interface ChangelogEntry {
   title: string;
   description: string;
-  tag?: 'NEW' | 'IMPROVED' | 'FIXED' | 'SECURITY';
+  tag?: 'NEW' | 'IMPROVED' | 'FIXED' | 'SECURITY' | 'SUMMARY';
   issueNumbers?: string[];
   repoName?: string;
   repoId?: string | number;
@@ -27,6 +27,8 @@ const getTagColor = (tag?: string) => {
       return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
     case "SECURITY":
       return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
+    case "SUMMARY":
+      return "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800";
     default:
       return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-900/30 dark:text-gray-400 dark:border-gray-800";
   }
@@ -59,7 +61,7 @@ export default function ChangelogDateBlock({ date, entries }: ChangelogDateBlock
   });
   
   // Order of tags
-  const tagOrder = ['NEW', 'IMPROVED', 'FIXED', 'SECURITY', 'OTHER'];
+  const tagOrder = ['SUMMARY', 'NEW', 'IMPROVED', 'FIXED', 'SECURITY', 'OTHER'];
   
   // Sort tags
   const sortedTags = Object.keys(groupedByTag).sort(

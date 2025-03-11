@@ -44,16 +44,17 @@ const parseChangelogContent = (content: string) => {
       date = dateMatch[0];
     }
     
-    // Try to detect entry type (NEW, IMPROVED, FIXED, SECURITY)
-    let tag: 'NEW' | 'IMPROVED' | 'FIXED' | 'SECURITY' | undefined;
-    if (/new|add|added|feature|implement/i.test(title)) {
+    // Try to detect entry type based on section title
+    let tag: 'NEW' | 'IMPROVED' | 'FIXED' | 'SUMMARY' | undefined;
+    
+    if (title.toLowerCase().includes('summary')) {
+      tag = 'SUMMARY';
+    } else if (title.toLowerCase().includes('new feature') || title.toLowerCase().includes('new features')) {
       tag = 'NEW';
-    } else if (/improve|enhancement|better|update|updated/i.test(title)) {
+    } else if (title.toLowerCase().includes('improvement') || title.toLowerCase().includes('improvements')) {
       tag = 'IMPROVED';
-    } else if (/fix|fixed|bug|issue|resolve|resolved/i.test(title)) {
+    } else if (title.toLowerCase().includes('bug fix') || title.toLowerCase().includes('bug fixes')) {
       tag = 'FIXED';
-    } else if (/security|vulnerability|secure|protect/i.test(title)) {
-      tag = 'SECURITY';
     }
     
     // Look for issue numbers
