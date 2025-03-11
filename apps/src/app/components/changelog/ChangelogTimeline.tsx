@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
-import ChangelogEntryCard from './ChangelogEntryCard';
+import ChangelogDateBlock from './ChangelogDateBlock';
 
 interface ChangelogTimelineProps {
   changelog: {
@@ -44,14 +44,16 @@ const parseChangelogContent = (content: string) => {
       date = dateMatch[0];
     }
     
-    // Try to detect entry type (NEW, IMPROVED, FIXED)
-    let tag: 'NEW' | 'IMPROVED' | 'FIXED' | undefined;
+    // Try to detect entry type (NEW, IMPROVED, FIXED, SECURITY)
+    let tag: 'NEW' | 'IMPROVED' | 'FIXED' | 'SECURITY' | undefined;
     if (/new|add|added|feature|implement/i.test(title)) {
       tag = 'NEW';
     } else if (/improve|enhancement|better|update|updated/i.test(title)) {
       tag = 'IMPROVED';
     } else if (/fix|fixed|bug|issue|resolve|resolved/i.test(title)) {
       tag = 'FIXED';
+    } else if (/security|vulnerability|secure|protect/i.test(title)) {
+      tag = 'SECURITY';
     }
     
     // Look for issue numbers
@@ -108,10 +110,10 @@ export default function ChangelogTimeline({ changelog, showRepoInfo = false }: C
   const groupedEntries = groupEntriesByDate(entries);
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="p-6 border-b border-gray-200">
-        <h2 className="text-xl font-semibold mb-2">Changelog</h2>
-        <div className="text-gray-600 text-sm">
+    <div className="w-full max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">Changelog</h2>
+        <div className="text-gray-600 dark:text-gray-400 text-sm">
           <span>{changelog.commit_count} commit{changelog.commit_count !== 1 ? 's' : ''}</span>
           <span className="mx-2">•</span>
           <span>Generated {generatedTime}</span>
@@ -119,35 +121,31 @@ export default function ChangelogTimeline({ changelog, showRepoInfo = false }: C
       </div>
 
       {entries.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm">
           {changelog.processed_changelog === null ? 'Changelog is still processing...' : 'No entries found in the changelog.'}
         </div>
       ) : (
-        <div className="p-6">
-          {groupedEntries.map(group => (
-            <div key={group.date} className="mb-8">
-              <h3 className="text-lg font-medium text-gray-500 mb-4">{new Date(group.date).toLocaleDateString('en-US', {
-                month: 'long',
-                day: '2-digit',
-                year: 'numeric'
-              }).toUpperCase()}</h3>
-              
-              <div className="space-y-4">
-                {group.entries.map((entry, idx) => (
-                  <ChangelogEntryCard
-                    key={idx}
-                    date={group.date}
-                    tag={entry.tag}
-                    title={entry.title}
-                    description={entry.description}
-                    issueNumbers={entry.issueNumbers}
-                    repoId={showRepoInfo ? changelog.repo_id : undefined}
-                    repoName={showRepoInfo ? changelog.repo_name : undefined}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="relative">
+          {/* Timeline line */}
+          <div className="absolute left-24 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-800"></div>
+
+          {/* Timeline entries */}
+          <div className="space-y-12">
+            {groupedEntries.map((group) => (
+              <ChangelogDateBlock 
+                key={group.date}
+                date={group.date}
+                entries={group.entries.map(entry => ({
+                  title: entry.title,
+                  description: entry.description,
+                  tag: entry.tag,
+                  issueNumbers: entry.issueNumbers,
+                  repoId: showRepoInfo ? changelog.repo_id : undefined,
+                  repoName: showRepoInfo ? changelog.repo_name : undefined
+                }))}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

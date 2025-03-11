@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Changelog } from '../hooks/useChangelogs';
-import ChangelogEntryCard from '../components/changelog/ChangelogEntryCard';
+import ChangelogDateBlock from '../components/changelog/ChangelogDateBlock';
 
 // Helper function to parse changelog content
 const parseChangelogContent = (content: string) => {
@@ -28,14 +28,16 @@ const parseChangelogContent = (content: string) => {
       date = dateMatch[0];
     }
     
-    // Try to detect entry type (NEW, IMPROVED, FIXED)
-    let tag: 'NEW' | 'IMPROVED' | 'FIXED' | undefined;
+    // Try to detect entry type (NEW, IMPROVED, FIXED, SECURITY)
+    let tag: 'NEW' | 'IMPROVED' | 'FIXED' | 'SECURITY' | undefined;
     if (/new|add|added|feature|implement/i.test(title)) {
       tag = 'NEW';
     } else if (/improve|enhancement|better|update|updated/i.test(title)) {
       tag = 'IMPROVED';
     } else if (/fix|fixed|bug|issue|resolve|resolved/i.test(title)) {
       tag = 'FIXED';
+    } else if (/security|vulnerability|secure|protect/i.test(title)) {
+      tag = 'SECURITY';
     }
     
     // Look for issue numbers
@@ -150,86 +152,73 @@ export default function ChangelogsPage() {
   // Loading state
   if (sessionStatus === 'loading' || loading) {
     return (
-      <div className="min-h-screen p-8 bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading changelogs...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading changelogs...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50">
+    <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
       <div className="max-w-4xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-          <div>
-            <Link href="/dashboard" className="text-blue-600 flex items-center mb-2">
-              <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path fillRule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clipRule="evenodd" />
-              </svg>
-              Back to Dashboard
-            </Link>
-            <h1 className="text-2xl font-bold">All Changelogs</h1>
-          </div>
+        <div className="mb-8">
+          <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 flex items-center mb-2">
+            <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path fillRule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clipRule="evenodd" />
+            </svg>
+            Back to Dashboard
+          </Link>
+          <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">All Changelogs</h1>
         </div>
         
         {error ? (
-          <div className="text-center py-8 bg-white p-6 shadow rounded-lg">
-            <p className="text-red-600 mb-4">{error}</p>
+          <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
+            <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
             <button
               onClick={() => router.refresh()}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-500"
             >
               Try Again
             </button>
           </div>
         ) : changelogs.length === 0 ? (
-          <div className="text-center py-8 bg-white p-6 shadow rounded-lg">
-            <p className="text-gray-600 mb-4">No changelogs have been generated yet.</p>
+          <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">No changelogs have been generated yet.</p>
             <Link 
               href="/dashboard"
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-500"
             >
               Back to Dashboard
             </Link>
           </div>
         ) : Object.keys(groupedEntries).length === 0 ? (
-          <div className="text-center py-8 bg-white p-6 shadow rounded-lg">
-            <p className="text-gray-600 mb-4">No processed changelog entries found.</p>
+          <div className="text-center py-8 bg-white dark:bg-gray-950 p-6 shadow rounded-lg border border-gray-200 dark:border-gray-800">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">No processed changelog entries found.</p>
             <Link 
               href="/dashboard"
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-500"
             >
               Back to Dashboard
             </Link>
           </div>
         ) : (
-          <div>
-            {Object.keys(groupedEntries).map(date => (
-              <div key={date} className="mb-8">
-                <h2 className="text-lg font-medium text-gray-500 mb-4">{new Date(date).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: '2-digit',
-                  year: 'numeric'
-                }).toUpperCase()}</h2>
-                
-                <div className="space-y-4">
-                  {groupedEntries[date].map((entry, idx) => (
-                    <ChangelogEntryCard
-                      key={idx}
-                      date={date}
-                      tag={entry.tag}
-                      title={entry.title}
-                      description={entry.description}
-                      issueNumbers={entry.issueNumbers}
-                      repoId={entry.repoId}
-                      repoName={entry.repoName}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="relative">
+            {/* Timeline line */}
+            <div className="absolute left-24 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-800"></div>
+            
+            {/* Timeline entries */}
+            <div className="space-y-12">
+              {Object.keys(groupedEntries).map(date => (
+                <ChangelogDateBlock
+                  key={date}
+                  date={date}
+                  entries={groupedEntries[date]}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
