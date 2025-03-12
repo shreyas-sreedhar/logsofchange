@@ -53,10 +53,10 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
   
   // Fetch repository changelog
   const { 
-    changelog, 
+    selectedChangelog: changelog, 
     loading: changelogLoading, 
     error: changelogError,
-    fetchRepoChangelog, 
+    fetchRepoChangelogs: fetchRepoChangelog, 
     fetchFullChangelog 
   } = useRepositoryChangelog(id);
 
@@ -310,7 +310,7 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
             </div>
           </div>
           <button 
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="px-4 py-2 bg-black text-white  hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             onClick={fetchCommits}
           >
             Update Date Range
@@ -325,7 +325,7 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
               {changelog && (
                 <Link
                   href={`/repository/${id}/changelog`}
-                  className="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-none font-normal mr-3"
+                  className="bg-black text-white hover:bg-blue-700 px-4 py-2 rounded-none font-normal mr-3"
                 >
                   View Full Changelog
                 </Link>
@@ -335,7 +335,7 @@ export function RepositoryClient({ id }: RepositoryClientProps) {
                   onClick={generateChangelog}
                   disabled={generating || !repo || commits.length === 0}
                   className={`
-                    ${generating ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800'} 
+                    ${generating ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-blue-800'} 
                     text-white px-4 py-2 rounded-none font-normal
                   `}
                 >
