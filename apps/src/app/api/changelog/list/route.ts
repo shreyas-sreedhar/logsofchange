@@ -3,18 +3,16 @@ import { auth } from '../../../auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = (() => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Validate environment variables
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
-}
-
-// Create Supabase client only if we have valid credentials
-const supabase = supabaseUrl && supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey) 
-  : null;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('❌ [CHANGELOG LIST] Missing Supabase environment variables');
+    return null;
+  }
+  return createClient(supabaseUrl, supabaseServiceKey);
+})();
 
 export async function GET(request: Request) {
   try {
